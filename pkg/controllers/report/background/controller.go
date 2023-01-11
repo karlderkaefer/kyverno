@@ -305,7 +305,7 @@ func (c *controller) reconcileReport(
 	// calculate necessary results
 	for _, policy := range backgroundPolicies {
 		if full || actual[reportutils.PolicyLabel(policy)] != policy.GetResourceVersion() {
-			scanner := utils.NewScanner(logger, c.client, c.rclient, c.informerCacheResolvers, c.config)
+			scanner := utils.NewScanner(logger, c.client, c.rclient, c.informerCacheResolvers)
 			for _, result := range scanner.ScanResource(ctx, *target, nsLabels, policy) {
 				if result.Error != nil {
 					return result.Error
