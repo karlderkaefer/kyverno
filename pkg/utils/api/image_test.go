@@ -4,13 +4,10 @@ import (
 	"testing"
 
 	kyvernov1 "github.com/kyverno/kyverno/api/kyverno/v1"
-	"github.com/kyverno/kyverno/pkg/config"
 	imageutils "github.com/kyverno/kyverno/pkg/utils/image"
 	kubeutils "github.com/kyverno/kyverno/pkg/utils/kube"
 	"gotest.tools/assert"
 )
-
-var cfg = config.NewDefaultConfiguration()
 
 func Test_extractImageInfo(t *testing.T) {
 	tests := []struct {
@@ -222,7 +219,7 @@ func Test_extractImageInfo(t *testing.T) {
 	for _, test := range tests {
 		resource, err := kubeutils.BytesToUnstructured(test.raw)
 		assert.NilError(t, err)
-		images, err := ExtractImagesFromResource(*resource, test.extractionConfig, cfg)
+		images, err := ExtractImagesFromResource(*resource, test.extractionConfig)
 		assert.NilError(t, err)
 		assert.DeepEqual(t, test.images, images)
 	}

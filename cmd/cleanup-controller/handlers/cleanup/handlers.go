@@ -10,7 +10,6 @@ import (
 	kyvernov2alpha1 "github.com/kyverno/kyverno/api/kyverno/v2alpha1"
 	kyvernov2alpha1listers "github.com/kyverno/kyverno/pkg/client/listers/kyverno/v2alpha1"
 	"github.com/kyverno/kyverno/pkg/clients/dclient"
-	"github.com/kyverno/kyverno/pkg/config"
 	enginecontext "github.com/kyverno/kyverno/pkg/engine/context"
 	"github.com/kyverno/kyverno/pkg/event"
 	controllerutils "github.com/kyverno/kyverno/pkg/utils/controller"
@@ -48,7 +47,7 @@ func New(
 	}
 }
 
-func (h *handlers) Cleanup(ctx context.Context, logger logr.Logger, name string, _ time.Time, cfg config.Configuration) error {
+func (h *handlers) Cleanup(ctx context.Context, logger logr.Logger, name string, _ time.Time) error {
 	logger.Info("cleaning up...")
 	defer logger.Info("done")
 	namespace, name, err := cache.SplitMetaNamespaceKey(name)
@@ -59,7 +58,7 @@ func (h *handlers) Cleanup(ctx context.Context, logger logr.Logger, name string,
 	if err != nil {
 		return err
 	}
-	return h.executePolicy(ctx, logger, policy, cfg)
+	return h.executePolicy(ctx, logger, policy)
 }
 
 func (h *handlers) lookupPolicy(namespace, name string) (kyvernov2alpha1.CleanupPolicyInterface, error) {
@@ -70,7 +69,7 @@ func (h *handlers) lookupPolicy(namespace, name string) (kyvernov2alpha1.Cleanup
 	}
 }
 
-func (h *handlers) executePolicy(ctx context.Context, logger logr.Logger, policy kyvernov2alpha1.CleanupPolicyInterface, cfg config.Configuration) error {
+func (h *handlers) executePolicy(ctx context.Context, logger logr.Logger, policy kyvernov2alpha1.CleanupPolicyInterface) error {
 	spec := policy.GetSpec()
 	kinds := sets.New(spec.MatchResources.GetKinds()...)
 	debug := logger.V(4)
@@ -150,7 +149,7 @@ func (h *handlers) executePolicy(ctx context.Context, logger logr.Logger, policy
 							errs = append(errs, err)
 							continue
 						}
-						if err := enginectx.AddImageInfos(&resource, cfg); err != nil {
+						if err := enginectx.AddImageInfos(&resource); err != nil {
 							debug.Error(err, "failed to add image infos in context")
 							errs = append(errs, err)
 							continue
