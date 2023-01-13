@@ -21,7 +21,6 @@ import (
 	"github.com/kyverno/kyverno/pkg/autogen"
 	"github.com/kyverno/kyverno/pkg/background/generate"
 	"github.com/kyverno/kyverno/pkg/clients/dclient"
-	"github.com/kyverno/kyverno/pkg/config"
 	"github.com/kyverno/kyverno/pkg/engine"
 	engineContext "github.com/kyverno/kyverno/pkg/engine/context"
 	"github.com/kyverno/kyverno/pkg/engine/response"
@@ -452,8 +451,7 @@ OuterLoop:
 		}
 	}
 
-	cfg := config.NewDefaultConfiguration()
-	if err := ctx.AddImageInfos(c.Resource, cfg); err != nil {
+	if err := ctx.AddImageInfos(c.Resource); err != nil {
 		if err != nil {
 			log.Log.Error(err, "failed to add image variables to context")
 		}
@@ -512,7 +510,7 @@ OuterLoop:
 	var info Info
 	var validateResponse *response.EngineResponse
 	if policyHasValidate {
-		validateResponse = engine.Validate(context.Background(), registryclient.NewOrDie(), policyContext, cfg)
+		validateResponse = engine.Validate(context.Background(), registryclient.NewOrDie(), policyContext)
 		info = ProcessValidateEngineResponse(c.Policy, validateResponse, resPath, c.Rc, c.PolicyReport, c.AuditWarn)
 	}
 
@@ -520,7 +518,7 @@ OuterLoop:
 		engineResponses = append(engineResponses, validateResponse)
 	}
 
-	verifyImageResponse, _ := engine.VerifyAndPatchImages(context.Background(), registryclient.NewOrDie(), policyContext, cfg)
+	verifyImageResponse, _ := engine.VerifyAndPatchImages(context.Background(), registryclient.NewOrDie(), policyContext)
 	if verifyImageResponse != nil && !verifyImageResponse.IsEmpty() {
 		engineResponses = append(engineResponses, verifyImageResponse)
 		info = ProcessValidateEngineResponse(c.Policy, verifyImageResponse, resPath, c.Rc, c.PolicyReport, c.AuditWarn)
