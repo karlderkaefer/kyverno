@@ -126,10 +126,6 @@ func (c *PolicyContext) FindExceptions(rule string) ([]*kyvernov2alpha1.PolicyEx
 	return result, nil
 }
 
-func (c *PolicyContext) Client() dclient.Interface {
-	return c.client
-}
-
 // Mutators
 
 func (c *PolicyContext) WithPolicy(policy kyvernov1.PolicyInterface) *PolicyContext {
@@ -259,7 +255,7 @@ func NewPolicyContextFromAdmissionRequest(
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to parse resource")
 	}
-	if err := ctx.AddImageInfos(&newResource, configuration); err != nil {
+	if err := ctx.AddImageInfos(&newResource); err != nil {
 		return nil, errors.Wrap(err, "failed to add image information to the policy rule context")
 	}
 	requestResource := request.RequestResource.DeepCopy()
