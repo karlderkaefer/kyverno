@@ -13,7 +13,6 @@ import (
 
 	kyvernov1 "github.com/kyverno/kyverno/api/kyverno/v1"
 	"github.com/kyverno/kyverno/pkg/clients/dclient"
-	"github.com/kyverno/kyverno/pkg/config"
 	"github.com/kyverno/kyverno/pkg/engine"
 	"github.com/kyverno/kyverno/pkg/engine/response"
 	"github.com/kyverno/kyverno/pkg/registryclient"
@@ -159,8 +158,7 @@ func runTestCase(t *testing.T, tc TestCase) bool {
 
 	policyContext = policyContext.WithNewResource(*resource)
 
-	cfg := config.NewDefaultConfiguration()
-	er = engine.Validate(context.TODO(), registryclient.NewOrDie(), policyContext, cfg)
+	er = engine.Validate(context.TODO(), registryclient.NewOrDie(), policyContext)
 	t.Log("---Validation---")
 	validateResponse(t, er.PolicyResponse, tc.Expected.Validation.PolicyResponse)
 

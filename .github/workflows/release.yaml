@@ -138,7 +138,7 @@ jobs:
         id: version
         run: echo "version=${GITHUB_REF#refs/*/}" >> $GITHUB_OUTPUT
       - name: Checkout
-        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
+        uses: actions/checkout@755da8c3cf115ac066823e79a1e1788f8940201b # v3.2.0
       - name: Setup build env
         uses: ./.github/actions/setup-build-env
       - uses: creekorful/goreportcard-action@1f35ced8cdac2cba28c9a2f2288a16aacfd507f9 # pin@v1.0
@@ -173,11 +173,11 @@ jobs:
         id: version
         run: echo "version=${GITHUB_REF#refs/*/}" >> $GITHUB_OUTPUT
       - name: Checkout
-        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
+        uses: actions/checkout@755da8c3cf115ac066823e79a1e1788f8940201b # v3.2.0
       - name: Setup build env
         uses: ./.github/actions/setup-build-env
       - name: Setup Flux CLI
-        uses: fluxcd/flux2/action@a9f53b4f1aef910fab68f790f7bf5b49c9a1677c # v0.38.3
+        uses: fluxcd/flux2/action@12e065cc432a18b0a4cff1a581e14c337e55732e # v0.38.1
         with:
           version: 0.35.0
 
@@ -237,7 +237,7 @@ jobs:
       - create-release
     steps:
       - name: Checkout
-        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
+        uses: actions/checkout@755da8c3cf115ac066823e79a1e1788f8940201b # v3.2.0
       - name: Setup build env
         uses: ./.github/actions/setup-build-env
       - name: Check Tag
