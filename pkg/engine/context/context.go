@@ -9,7 +9,6 @@ import (
 	jsonpatch "github.com/evanphx/json-patch/v5"
 	kyvernov1 "github.com/kyverno/kyverno/api/kyverno/v1"
 	kyvernov1beta1 "github.com/kyverno/kyverno/api/kyverno/v1beta1"
-	"github.com/kyverno/kyverno/pkg/config"
 	"github.com/kyverno/kyverno/pkg/logging"
 	apiutils "github.com/kyverno/kyverno/pkg/utils/api"
 	"github.com/pkg/errors"
@@ -70,17 +69,17 @@ type Interface interface {
 	AddElement(data interface{}, index, nesting int) error
 
 	// AddImageInfo adds image info to the context
-	AddImageInfo(info apiutils.ImageInfo, cfg config.Configuration) error
+	AddImageInfo(info apiutils.ImageInfo) error
 
 	// AddImageInfos adds image infos to the context
-	AddImageInfos(resource *unstructured.Unstructured, cfg config.Configuration) error
+	AddImageInfos(resource *unstructured.Unstructured) error
 
 	// ImageInfo returns image infos present in the context
 	ImageInfo() map[string]map[string]apiutils.ImageInfo
 
 	// GenerateCustomImageInfo returns image infos as defined by a custom image extraction config
 	// and updates the context
-	GenerateCustomImageInfo(resource *unstructured.Unstructured, imageExtractorConfigs kyvernov1.ImageExtractorConfigs, cfg config.Configuration) (map[string]map[string]apiutils.ImageInfo, error)
+	GenerateCustomImageInfo(resource *unstructured.Unstructured, imageExtractorConfigs kyvernov1.ImageExtractorConfigs) (map[string]map[string]apiutils.ImageInfo, error)
 
 	// Checkpoint creates a copy of the current internal state and pushes it into a stack of stored states.
 	Checkpoint()
@@ -253,7 +252,7 @@ func (ctx *context) AddElement(data interface{}, index, nesting int) error {
 	return addToContext(ctx, data)
 }
 
-func (ctx *context) AddImageInfo(info apiutils.ImageInfo, cfg config.Configuration) error {
+func (ctx *context) AddImageInfo(info apiutils.ImageInfo) error {
 	data := map[string]interface{}{
 		"reference":        info.String(),
 		"referenceWithTag": info.ReferenceWithTag(),
@@ -266,8 +265,8 @@ func (ctx *context) AddImageInfo(info apiutils.ImageInfo, cfg config.Configurati
 	return addToContext(ctx, data, "image")
 }
 
-func (ctx *context) AddImageInfos(resource *unstructured.Unstructured, cfg config.Configuration) error {
-	images, err := apiutils.ExtractImagesFromResource(*resource, nil, cfg)
+func (ctx *context) AddImageInfos(resource *unstructured.Unstructured) error {
+	images, err := apiutils.ExtractImagesFromResource(*resource, nil)
 	if err != nil {
 		return err
 	}
@@ -280,8 +279,8 @@ func (ctx *context) AddImageInfos(resource *unstructured.Unstructured, cfg confi
 	return addToContext(ctx, images, "images")
 }
 
-func (ctx *context) GenerateCustomImageInfo(resource *unstructured.Unstructured, imageExtractorConfigs kyvernov1.ImageExtractorConfigs, cfg config.Configuration) (map[string]map[string]apiutils.ImageInfo, error) {
-	images, err := apiutils.ExtractImagesFromResource(*resource, imageExtractorConfigs, cfg)
+func (ctx *context) GenerateCustomImageInfo(resource *unstructured.Unstructured, imageExtractorConfigs kyvernov1.ImageExtractorConfigs) (map[string]map[string]apiutils.ImageInfo, error) {
+	images, err := apiutils.ExtractImagesFromResource(*resource, imageExtractorConfigs)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to extract images")
 	}

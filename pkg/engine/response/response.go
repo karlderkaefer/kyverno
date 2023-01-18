@@ -7,7 +7,6 @@ import (
 
 	kyvernov1 "github.com/kyverno/kyverno/api/kyverno/v1"
 	pssutils "github.com/kyverno/kyverno/pkg/pss/utils"
-	utils "github.com/kyverno/kyverno/pkg/utils/match"
 	"github.com/kyverno/kyverno/pkg/utils/wildcard"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -24,9 +23,6 @@ type EngineResponse struct {
 
 	// Policy Response
 	PolicyResponse PolicyResponse
-
-	// NamespaceLabels given by policy context
-	NamespaceLabels map[string]string
 }
 
 // PolicyResponse policy application response
@@ -252,36 +248,16 @@ func (er EngineResponse) getRules(predicate func(RuleStatus) bool) []string {
 
 func (er *EngineResponse) GetValidationFailureAction() kyvernov1.ValidationFailureAction {
 	for _, v := range er.PolicyResponse.ValidationFailureActionOverrides {
-		if !v.Action.IsValid() {
-			continue
-		}
-
-		if v.Namespaces == nil {
-			hasPass, err := utils.CheckSelector(v.NamespaceSelector, er.NamespaceLabels)
-			if err == nil && hasPass {
+		for _, ns := range v.Namespaces {
+			if wildcard.Match(ns, er.PatchedResource.GetNamespace()) {
 				return v.Action
 			}
 		}
-
-		for _, ns := range v.Namespaces {
-			if wildcard.Match(ns, er.PatchedResource.GetNamespace()) {
-				if v.NamespaceSelector == nil {
-					return v.Action
-				}
-
-				hasPass, err := utils.CheckSelector(v.NamespaceSelector, er.NamespaceLabels)
-				if err == nil && hasPass {
-					return v.Action
-				}
-			}
-		}
 	}
-
 	return er.PolicyResponse.ValidationFailureAction
 }
 
 type ValidationFailureActionOverride struct {
-	Action            kyvernov1.ValidationFailureAction `json:"action"`
-	Namespaces        []string                          `json:"namespaces,omitempty"`
-	NamespaceSelector *metav1.LabelSelector             `json:"namespaceSelector,omitempty" yaml:"namespaceSelector,omitempty"`
+	Action     kyvernov1.ValidationFailureAction `json:"action"`
+	Namespaces []string                          `json:"namespaces"`
 }

@@ -14,7 +14,6 @@ import (
 	kyvernov2alpha1 "github.com/kyverno/kyverno/api/kyverno/v2alpha1"
 	"github.com/kyverno/kyverno/cmd/cli/kubectl-kyverno/utils/store"
 	"github.com/kyverno/kyverno/pkg/autogen"
-	"github.com/kyverno/kyverno/pkg/config"
 	"github.com/kyverno/kyverno/pkg/engine/common"
 	"github.com/kyverno/kyverno/pkg/engine/response"
 	"github.com/kyverno/kyverno/pkg/engine/validate"
@@ -38,7 +37,7 @@ import (
 )
 
 // Validate applies validation rules from policy on the resource
-func Validate(ctx context.Context, rclient registryclient.Client, policyContext *PolicyContext, cfg config.Configuration) (resp *response.EngineResponse) {
+func Validate(ctx context.Context, rclient registryclient.Client, policyContext *PolicyContext) (resp *response.EngineResponse) {
 	resp = &response.EngineResponse{}
 	startTime := time.Now()
 
@@ -49,8 +48,7 @@ func Validate(ctx context.Context, rclient registryclient.Client, policyContext 
 		logger.V(4).Info("finished policy processing", "processingTime", resp.PolicyResponse.ProcessingTime.String(), "validationRulesApplied", resp.PolicyResponse.RulesAppliedCount)
 	}()
 
-	resp = validateResource(ctx, logger, rclient, policyContext, cfg)
-	resp.NamespaceLabels = policyContext.namespaceLabels
+	resp = validateResource(ctx, logger, rclient, policyContext)
 	return
 }
 
@@ -90,15 +88,14 @@ func buildResponse(ctx *PolicyContext, resp *response.EngineResponse, startTime 
 	resp.PolicyResponse.ValidationFailureAction = ctx.policy.GetSpec().ValidationFailureAction
 
 	for _, v := range ctx.policy.GetSpec().ValidationFailureActionOverrides {
-		newOverrides := response.ValidationFailureActionOverride{Action: v.Action, Namespaces: v.Namespaces, NamespaceSelector: v.NamespaceSelector}
-		resp.PolicyResponse.ValidationFailureActionOverrides = append(resp.PolicyResponse.ValidationFailureActionOverrides, newOverrides)
+		resp.PolicyResponse.ValidationFailureActionOverrides = append(resp.PolicyResponse.ValidationFailureActionOverrides, response.ValidationFailureActionOverride{Action: v.Action, Namespaces: v.Namespaces})
 	}
 
 	resp.PolicyResponse.ProcessingTime = time.Since(startTime)
 	resp.PolicyResponse.PolicyExecutionTimestamp = startTime.Unix()
 }
 
-func validateResource(ctx context.Context, log logr.Logger, rclient registryclient.Client, enginectx *PolicyContext, cfg config.Configuration) *response.EngineResponse {
+func validateResource(ctx context.Context, log logr.Logger, rclient registryclient.Client, enginectx *PolicyContext) *response.EngineResponse {
 	resp := &response.EngineResponse{}
 
 	enginectx.jsonContext.Checkpoint()
@@ -151,7 +148,7 @@ func validateResource(ctx context.Context, log logr.Logger, rclient registryclie
 				if hasValidate && !hasYAMLSignatureVerify {
 					return processValidationRule(ctx, log, rclient, enginectx, rule)
 				} else if hasValidateImage {
-					return processImageValidationRule(ctx, log, rclient, enginectx, rule, cfg)
+					return processImageValidationRule(ctx, log, rclient, enginectx, rule)
 				} else if hasYAMLSignatureVerify {
 					return processYAMLValidationRule(log, enginectx, rule)
 				}

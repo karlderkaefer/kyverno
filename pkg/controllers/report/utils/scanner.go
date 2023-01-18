@@ -7,7 +7,6 @@ import (
 	kyvernov1 "github.com/kyverno/kyverno/api/kyverno/v1"
 	kyvernov2alpha1listers "github.com/kyverno/kyverno/pkg/client/listers/kyverno/v2alpha1"
 	"github.com/kyverno/kyverno/pkg/clients/dclient"
-	"github.com/kyverno/kyverno/pkg/config"
 	"github.com/kyverno/kyverno/pkg/engine"
 	enginecontext "github.com/kyverno/kyverno/pkg/engine/context"
 	"github.com/kyverno/kyverno/pkg/engine/context/resolvers"
@@ -24,7 +23,6 @@ type scanner struct {
 	informerCacheResolvers resolvers.ConfigmapResolver
 	polexLister            kyvernov2alpha1listers.PolicyExceptionLister
 	excludeGroupRole       []string
-	config                 config.Configuration
 }
 
 type ScanResult struct {
@@ -42,7 +40,6 @@ func NewScanner(
 	rclient registryclient.Client,
 	informerCacheResolvers resolvers.ConfigmapResolver,
 	polexLister kyvernov2alpha1listers.PolicyExceptionLister,
-	config config.Configuration,
 	excludeGroupRole ...string,
 ) Scanner {
 	return &scanner{
@@ -51,7 +48,6 @@ func NewScanner(
 		rclient:                rclient,
 		informerCacheResolvers: informerCacheResolvers,
 		polexLister:            polexLister,
-		config:                 config,
 		excludeGroupRole:       excludeGroupRole,
 	}
 }
@@ -91,7 +87,7 @@ func (s *scanner) validateResource(ctx context.Context, resource unstructured.Un
 	if err := enginectx.AddNamespace(resource.GetNamespace()); err != nil {
 		return nil, err
 	}
-	if err := enginectx.AddImageInfos(&resource, s.config); err != nil {
+	if err := enginectx.AddImageInfos(&resource); err != nil {
 		return nil, err
 	}
 	if err := enginectx.AddOperation("CREATE"); err != nil {
@@ -105,7 +101,7 @@ func (s *scanner) validateResource(ctx context.Context, resource unstructured.Un
 		WithExcludeGroupRole(s.excludeGroupRole...).
 		WithInformerCacheResolver(s.informerCacheResolvers).
 		WithExceptions(s.polexLister)
-	return engine.Validate(ctx, s.rclient, policyCtx, s.config), nil
+	return engine.Validate(ctx, s.rclient, policyCtx), nil
 }
 
 func (s *scanner) validateImages(ctx context.Context, resource unstructured.Unstructured, nsLabels map[string]string, policy kyvernov1.PolicyInterface) (*response.EngineResponse, error) {
@@ -116,7 +112,7 @@ func (s *scanner) validateImages(ctx context.Context, resource unstructured.Unst
 	if err := enginectx.AddNamespace(resource.GetNamespace()); err != nil {
 		return nil, err
 	}
-	if err := enginectx.AddImageInfos(&resource, s.config); err != nil {
+	if err := enginectx.AddImageInfos(&resource); err != nil {
 		return nil, err
 	}
 	if err := enginectx.AddOperation("CREATE"); err != nil {
@@ -130,7 +126,7 @@ func (s *scanner) validateImages(ctx context.Context, resource unstructured.Unst
 		WithExcludeGroupRole(s.excludeGroupRole...).
 		WithInformerCacheResolver(s.informerCacheResolvers).
 		WithExceptions(s.polexLister)
-	response, _ := engine.VerifyAndPatchImages(ctx, s.rclient, policyCtx, s.config)
+	response, _ := engine.VerifyAndPatchImages(ctx, s.rclient, policyCtx)
 	if len(response.PolicyResponse.Rules) > 0 {
 		s.logger.Info("validateImages", "policy", policy, "response", response)
 	}

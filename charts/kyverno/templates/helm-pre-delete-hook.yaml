@@ -1,4 +1,4 @@
-{{- if .Values.webhooksCleanup.enabled }}
+{{- if .Values.webhooksCleanup.enable }}
 apiVersion: batch/v1
 kind: Job
 metadata:
