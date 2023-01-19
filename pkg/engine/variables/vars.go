@@ -84,6 +84,9 @@ func SubstituteAll(log logr.Logger, ctx context.EvalInterface, document interfac
 }
 
 func SubstituteAllInPreconditions(log logr.Logger, ctx context.EvalInterface, document interface{}) (interface{}, error) {
+	// We must convert all incoming conditions to JSON data i.e.
+	// string, []interface{}, map[string]interface{}
+	// we cannot use structs otherwise json traverse doesn't work
 	untypedDoc, err := DocumentToUntyped(document)
 	if err != nil {
 		return nil, err
@@ -125,8 +128,6 @@ func SubstituteAllInRule(log logr.Logger, ctx context.EvalInterface, rule kyvern
 	return *result, nil
 }
 
-// DocumentToUntyped converts a typed object to JSON data i.e.
-// string, []interface{}, map[string]interface{}
 func DocumentToUntyped(doc interface{}) (interface{}, error) {
 	jsonDoc, err := json.Marshal(doc)
 	if err != nil {
@@ -142,19 +143,19 @@ func DocumentToUntyped(doc interface{}) (interface{}, error) {
 	return untyped, nil
 }
 
-func untypedToTyped[T any](untyped interface{}) (*T, error) {
+func UntypedToRule(untyped interface{}) (kyvernov1.Rule, error) {
 	jsonRule, err := json.Marshal(untyped)
 	if err != nil {
-		return nil, err
+		return kyvernov1.Rule{}, err
 	}
 
-	var t T
-	err = json.Unmarshal(jsonRule, &t)
+	var rule kyvernov1.Rule
+	err = json.Unmarshal(jsonRule, &rule)
 	if err != nil {
-		return nil, err
+		return kyvernov1.Rule{}, err
 	}
 
-	return &t, nil
+	return rule, nil
 }
 
 func SubstituteAllInConditions(log logr.Logger, ctx context.EvalInterface, conditions []kyvernov1.AnyAllConditions) ([]kyvernov1.AnyAllConditions, error) {
@@ -229,12 +230,7 @@ func SubstituteAllForceMutate(log logr.Logger, ctx context.Interface, typedRule 
 		}
 	}
 
-	result, err := untypedToTyped[kyvernov1.Rule](rule)
-	if err != nil {
-		return kyvernov1.Rule{}, err
-	}
-
-	return *result, nil
+	return UntypedToRule(rule)
 }
 
 func substituteVars(log logr.Logger, ctx context.EvalInterface, rule interface{}, vr VariableResolver) (interface{}, error) {

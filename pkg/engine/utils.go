@@ -14,8 +14,10 @@ import (
 	"github.com/kyverno/kyverno/pkg/engine/context"
 	"github.com/kyverno/kyverno/pkg/engine/response"
 	"github.com/kyverno/kyverno/pkg/engine/variables"
+	"github.com/kyverno/kyverno/pkg/engine/wildcards"
+	"github.com/kyverno/kyverno/pkg/logging"
 	datautils "github.com/kyverno/kyverno/pkg/utils/data"
-	matchutils "github.com/kyverno/kyverno/pkg/utils/match"
+	matched "github.com/kyverno/kyverno/pkg/utils/match"
 	"github.com/kyverno/kyverno/pkg/utils/wildcard"
 	"github.com/pkg/errors"
 	"golang.org/x/exp/slices"
@@ -24,6 +26,7 @@ import (
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/labels"
 )
 
 // EngineStats stores in the statistics for a single application of resource
@@ -32,6 +35,10 @@ type EngineStats struct {
 	ExecutionTime time.Duration
 	// Count of rules that were applied successfully
 	RulesAppliedCount int
+}
+
+func checkName(name, resourceName string) bool {
+	return wildcard.Match(name, resourceName)
 }
 
 func checkNameSpace(namespaces []string, resource unstructured.Unstructured) bool {
@@ -47,6 +54,43 @@ func checkNameSpace(namespaces []string, resource unstructured.Unstructured) boo
 	}
 
 	return false
+}
+
+func checkAnnotations(annotations map[string]string, resourceAnnotations map[string]string) bool {
+	if len(annotations) == 0 {
+		return true
+	}
+
+	for k, v := range annotations {
+		match := false
+		for k1, v1 := range resourceAnnotations {
+			if wildcard.Match(k, k1) && wildcard.Match(v, v1) {
+				match = true
+				break
+			}
+		}
+
+		if !match {
+			return false
+		}
+	}
+
+	return true
+}
+
+func checkSelector(labelSelector *metav1.LabelSelector, resourceLabels map[string]string) (bool, error) {
+	wildcards.ReplaceInSelector(labelSelector, resourceLabels)
+	selector, err := metav1.LabelSelectorAsSelector(labelSelector)
+	if err != nil {
+		logging.Error(err, "failed to build label selector")
+		return false, err
+	}
+
+	if selector.Matches(labels.Set(resourceLabels)) {
+		return true, nil
+	}
+
+	return false, nil
 }
 
 // doesResourceMatchConditionBlock filters the resource with defined conditions
@@ -73,7 +117,7 @@ func doesResourceMatchConditionBlock(subresourceGVKToAPIResource map[string]*met
 
 	if len(conditionBlock.Kinds) > 0 {
 		// Matching on ephemeralcontainers even when they are not explicitly specified for backward compatibility.
-		if !matchutils.CheckKind(subresourceGVKToAPIResource, conditionBlock.Kinds, resource.GroupVersionKind(), subresourceInAdmnReview, true) {
+		if !matched.CheckKind(subresourceGVKToAPIResource, conditionBlock.Kinds, resource.GroupVersionKind(), subresourceInAdmnReview, true) {
 			errs = append(errs, fmt.Errorf("kind does not match %v", conditionBlock.Kinds))
 		}
 	}
@@ -84,7 +128,7 @@ func doesResourceMatchConditionBlock(subresourceGVKToAPIResource map[string]*met
 	}
 
 	if conditionBlock.Name != "" {
-		if !matchutils.CheckName(conditionBlock.Name, resourceName) {
+		if !checkName(conditionBlock.Name, resourceName) {
 			errs = append(errs, fmt.Errorf("name does not match"))
 		}
 	}
@@ -92,7 +136,7 @@ func doesResourceMatchConditionBlock(subresourceGVKToAPIResource map[string]*met
 	if len(conditionBlock.Names) > 0 {
 		noneMatch := true
 		for i := range conditionBlock.Names {
-			if matchutils.CheckName(conditionBlock.Names[i], resourceName) {
+			if checkName(conditionBlock.Names[i], resourceName) {
 				noneMatch = false
 				break
 			}
@@ -109,13 +153,13 @@ func doesResourceMatchConditionBlock(subresourceGVKToAPIResource map[string]*met
 	}
 
 	if len(conditionBlock.Annotations) > 0 {
-		if !matchutils.CheckAnnotations(conditionBlock.Annotations, resource.GetAnnotations()) {
+		if !checkAnnotations(conditionBlock.Annotations, resource.GetAnnotations()) {
 			errs = append(errs, fmt.Errorf("annotations does not match"))
 		}
 	}
 
 	if conditionBlock.Selector != nil {
-		hasPassed, err := matchutils.CheckSelector(conditionBlock.Selector, resource.GetLabels())
+		hasPassed, err := checkSelector(conditionBlock.Selector, resource.GetLabels())
 		if err != nil {
 			errs = append(errs, fmt.Errorf("failed to parse selector: %v", err))
 		} else {
@@ -127,7 +171,7 @@ func doesResourceMatchConditionBlock(subresourceGVKToAPIResource map[string]*met
 
 	if conditionBlock.NamespaceSelector != nil && resource.GetKind() != "Namespace" &&
 		(resource.GetKind() != "" || slices.Contains(conditionBlock.Kinds, "*") && wildcard.Match("*", resource.GetKind())) {
-		hasPassed, err := matchutils.CheckSelector(conditionBlock.NamespaceSelector, namespaceLabels)
+		hasPassed, err := checkSelector(conditionBlock.NamespaceSelector, namespaceLabels)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("failed to parse namespace selector: %v", err))
 		} else {
@@ -161,6 +205,8 @@ func doesResourceMatchConditionBlock(subresourceGVKToAPIResource map[string]*met
 
 // matchSubjects return true if one of ruleSubjects exist in userInfo
 func matchSubjects(ruleSubjects []rbacv1.Subject, userInfo authenticationv1.UserInfo, dynamicConfig []string) bool {
+	const SaPrefix = "system:serviceaccount:"
+
 	if store.GetMock() {
 		mockSubject := store.GetSubjects().Subject
 		for _, subject := range ruleSubjects {
@@ -175,9 +221,35 @@ func matchSubjects(ruleSubjects []rbacv1.Subject, userInfo authenticationv1.User
 				}
 			}
 		}
+
 		return false
 	} else {
-		return matchutils.CheckSubjects(ruleSubjects, userInfo, dynamicConfig)
+		userGroups := append(userInfo.Groups, userInfo.Username)
+		// TODO: see issue https://github.com/kyverno/kyverno/issues/861
+		for _, e := range dynamicConfig {
+			ruleSubjects = append(ruleSubjects,
+				rbacv1.Subject{Kind: "Group", Name: e},
+			)
+		}
+
+		for _, subject := range ruleSubjects {
+			switch subject.Kind {
+			case "ServiceAccount":
+				if len(userInfo.Username) <= len(SaPrefix) {
+					continue
+				}
+				subjectServiceAccount := subject.Namespace + ":" + subject.Name
+				if userInfo.Username[len(SaPrefix):] == subjectServiceAccount {
+					return true
+				}
+			case "User", "Group":
+				if slices.Contains(userGroups, subject.Name) {
+					return true
+				}
+			}
+		}
+
+		return false
 	}
 }
 
