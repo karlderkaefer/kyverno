@@ -1,17 +1,24 @@
 package event
 
 // Source of event generation
-type Source string
+type Source int
 
 const (
 	// AdmissionController : event generated in admission-control webhook
-	AdmissionController Source = "kyverno-admission"
+	AdmissionController Source = iota
 	// PolicyController : event generated in policy-controller
-	PolicyController Source = "kyverno-scan"
+	PolicyController
 	// GeneratePolicyController : event generated in generate policyController
-	GeneratePolicyController Source = "kyverno-generate"
+	GeneratePolicyController
 	// MutateExistingController : event generated for mutateExisting policies
-	MutateExistingController Source = "kyverno-mutate"
-	// CleanupController : event generated for cleanup policies
-	CleanupController Source = "kyverno-cleanup"
+	MutateExistingController
 )
+
+func (s Source) String() string {
+	return [...]string{
+		"kyverno-admission",
+		"kyverno-scan",
+		"kyverno-generate",
+		"kyverno-mutate",
+	}[s]
+}

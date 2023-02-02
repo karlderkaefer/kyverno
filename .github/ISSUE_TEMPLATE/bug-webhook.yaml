@@ -31,7 +31,6 @@ body:
         - 1.8.3
         - 1.8.4
         - 1.8.5
-        - 1.9.0
     validations:
       required: true
   - type: dropdown
@@ -71,13 +70,12 @@ body:
     id: kyverno-rule
     attributes:
       label: Kyverno Rule Type
-      description: What Kyverno rule/policy type?
+      description: What Kyverno rule type?
       options:
         - Validate
         - Mutate
         - Generate
         - verifyImages
-        - Cleanup
         - Other
     validations:
       required: true

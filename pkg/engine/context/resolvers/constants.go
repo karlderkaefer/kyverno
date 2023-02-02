@@ -1,5 +1,7 @@
 package resolvers
 
 const (
-	LabelCacheKey = "cache.kyverno.io/enabled"
+	TEST_NAMESPACE = "default"
+	TEST_CONFIGMAP = "myconfigmap"
+	LabelCacheKey  = "cache.kyverno.io/enabled"
 )

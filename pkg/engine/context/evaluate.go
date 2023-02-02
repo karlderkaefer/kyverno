@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/kyverno/kyverno/pkg/engine/jmespath"
+	"github.com/pkg/errors"
 )
 
 // Query the JSON context with JMESPATH search path
@@ -26,11 +27,11 @@ func (ctx *context) Query(query string) (interface{}, error) {
 	defer ctx.mutex.RUnlock()
 	var data interface{}
 	if err := json.Unmarshal(ctx.jsonRaw, &data); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal context: %w", err)
+		return nil, errors.Wrap(err, "failed to unmarshal context")
 	}
 	result, err := queryPath.Search(data)
 	if err != nil {
-		return nil, fmt.Errorf("JMESPath query failed: %w", err)
+		return nil, errors.Wrap(err, "JMESPath query failed")
 	}
 	return result, nil
 }
@@ -38,14 +39,14 @@ func (ctx *context) Query(query string) (interface{}, error) {
 func (ctx *context) HasChanged(jmespath string) (bool, error) {
 	objData, err := ctx.Query("request.object." + jmespath)
 	if err != nil {
-		return false, fmt.Errorf("failed to query request.object: %w", err)
+		return false, errors.Wrap(err, "failed to query request.object")
 	}
 	if objData == nil {
 		return false, fmt.Errorf("request.object.%s not found", jmespath)
 	}
 	oldObjData, err := ctx.Query("request.oldObject." + jmespath)
 	if err != nil {
-		return false, fmt.Errorf("failed to query request.object: %w", err)
+		return false, errors.Wrap(err, "failed to query request.object")
 	}
 	if oldObjData == nil {
 		return false, fmt.Errorf("request.oldObject.%s not found", jmespath)

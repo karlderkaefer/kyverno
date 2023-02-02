@@ -5,7 +5,6 @@ import (
 )
 
 const (
-	limit = 256
 	// engine attributes
 	PolicyGroupKey     = attribute.Key("kyverno.policy.group")
 	PolicyVersionKey   = attribute.Key("kyverno.policy.version")
@@ -58,13 +57,3 @@ const (
 	KubeClientOperationKey = attribute.Key("kube.client.operation")
 	KubeClientNamespaceKey = attribute.Key("kube.client.namespace")
 )
-
-// StringValue truncates the input value if its size is above the limit.
-// Some backends impose a limit on the size of a tag value.
-func StringValue(value string) string {
-	if len(value) > limit {
-		value = value[:limit-3]
-		value += "..."
-	}
-	return value
-}

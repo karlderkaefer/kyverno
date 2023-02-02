@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	// PolicyConditionReady means that the policy is ready
+	// Ready means that the policy is ready
 	PolicyConditionReady = "Ready"
 )
 

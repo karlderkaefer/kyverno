@@ -5,7 +5,7 @@ import (
 
 	"github.com/go-logr/logr"
 	kyvernov1 "github.com/kyverno/kyverno/api/kyverno/v1"
-	engineapi "github.com/kyverno/kyverno/pkg/engine/api"
+	"github.com/kyverno/kyverno/pkg/engine/response"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -45,7 +45,7 @@ func Test_getAction(t *testing.T) {
 
 func TestBlockRequest(t *testing.T) {
 	type args struct {
-		engineResponses []*engineapi.EngineResponse
+		engineResponses []*response.EngineResponse
 		failurePolicy   kyvernov1.FailurePolicyType
 		log             logr.Logger
 	}
@@ -56,14 +56,14 @@ func TestBlockRequest(t *testing.T) {
 	}{{
 		name: "failure - enforce",
 		args: args{
-			engineResponses: []*engineapi.EngineResponse{
+			engineResponses: []*response.EngineResponse{
 				{
-					PolicyResponse: engineapi.PolicyResponse{
+					PolicyResponse: response.PolicyResponse{
 						ValidationFailureAction: "Enforce",
-						Rules: []engineapi.RuleResponse{
+						Rules: []response.RuleResponse{
 							{
 								Name:    "rule-fail",
-								Status:  engineapi.RuleStatusFail,
+								Status:  response.RuleStatusFail,
 								Message: "message fail",
 							},
 						},
@@ -77,14 +77,14 @@ func TestBlockRequest(t *testing.T) {
 	}, {
 		name: "failure - audit",
 		args: args{
-			engineResponses: []*engineapi.EngineResponse{
+			engineResponses: []*response.EngineResponse{
 				{
-					PolicyResponse: engineapi.PolicyResponse{
+					PolicyResponse: response.PolicyResponse{
 						ValidationFailureAction: "Audit",
-						Rules: []engineapi.RuleResponse{
+						Rules: []response.RuleResponse{
 							{
 								Name:    "rule-fail",
-								Status:  engineapi.RuleStatusFail,
+								Status:  response.RuleStatusFail,
 								Message: "message fail",
 							},
 						},
@@ -98,14 +98,14 @@ func TestBlockRequest(t *testing.T) {
 	}, {
 		name: "error - fail",
 		args: args{
-			engineResponses: []*engineapi.EngineResponse{
+			engineResponses: []*response.EngineResponse{
 				{
-					PolicyResponse: engineapi.PolicyResponse{
+					PolicyResponse: response.PolicyResponse{
 						ValidationFailureAction: "Audit",
-						Rules: []engineapi.RuleResponse{
+						Rules: []response.RuleResponse{
 							{
 								Name:    "rule-error",
-								Status:  engineapi.RuleStatusError,
+								Status:  response.RuleStatusError,
 								Message: "message error",
 							},
 						},
@@ -119,14 +119,14 @@ func TestBlockRequest(t *testing.T) {
 	}, {
 		name: "error - ignore",
 		args: args{
-			engineResponses: []*engineapi.EngineResponse{
+			engineResponses: []*response.EngineResponse{
 				{
-					PolicyResponse: engineapi.PolicyResponse{
+					PolicyResponse: response.PolicyResponse{
 						ValidationFailureAction: "Audit",
-						Rules: []engineapi.RuleResponse{
+						Rules: []response.RuleResponse{
 							{
 								Name:    "rule-error",
-								Status:  engineapi.RuleStatusError,
+								Status:  response.RuleStatusError,
 								Message: "message error",
 							},
 						},
@@ -140,14 +140,14 @@ func TestBlockRequest(t *testing.T) {
 	}, {
 		name: "warning - ignore",
 		args: args{
-			engineResponses: []*engineapi.EngineResponse{
+			engineResponses: []*response.EngineResponse{
 				{
-					PolicyResponse: engineapi.PolicyResponse{
+					PolicyResponse: response.PolicyResponse{
 						ValidationFailureAction: "Audit",
-						Rules: []engineapi.RuleResponse{
+						Rules: []response.RuleResponse{
 							{
 								Name:    "rule-warning",
-								Status:  engineapi.RuleStatusWarn,
+								Status:  response.RuleStatusWarn,
 								Message: "message warning",
 							},
 						},
@@ -161,14 +161,14 @@ func TestBlockRequest(t *testing.T) {
 	}, {
 		name: "warning - fail",
 		args: args{
-			engineResponses: []*engineapi.EngineResponse{
+			engineResponses: []*response.EngineResponse{
 				{
-					PolicyResponse: engineapi.PolicyResponse{
+					PolicyResponse: response.PolicyResponse{
 						ValidationFailureAction: "Audit",
-						Rules: []engineapi.RuleResponse{
+						Rules: []response.RuleResponse{
 							{
 								Name:    "rule-warning",
-								Status:  engineapi.RuleStatusWarn,
+								Status:  response.RuleStatusWarn,
 								Message: "message warning",
 							},
 						},
@@ -190,7 +190,7 @@ func TestBlockRequest(t *testing.T) {
 
 func TestGetBlockedMessages(t *testing.T) {
 	type args struct {
-		engineResponses []*engineapi.EngineResponse
+		engineResponses []*response.EngineResponse
 	}
 	tests := []struct {
 		name string
@@ -199,21 +199,21 @@ func TestGetBlockedMessages(t *testing.T) {
 	}{{
 		name: "failure - enforce",
 		args: args{
-			engineResponses: []*engineapi.EngineResponse{
+			engineResponses: []*response.EngineResponse{
 				{
-					PolicyResponse: engineapi.PolicyResponse{
-						Policy: engineapi.PolicySpec{
+					PolicyResponse: response.PolicyResponse{
+						Policy: response.PolicySpec{
 							Name: "test",
 						},
 						ValidationFailureAction: "Enforce",
-						Rules: []engineapi.RuleResponse{
+						Rules: []response.RuleResponse{
 							{
 								Name:    "rule-fail",
-								Status:  engineapi.RuleStatusFail,
+								Status:  response.RuleStatusFail,
 								Message: "message fail",
 							},
 						},
-						Resource: engineapi.ResourceSpec{
+						Resource: response.ResourceSpec{
 							Kind:      "foo",
 							Namespace: "bar",
 							Name:      "baz",
@@ -226,21 +226,21 @@ func TestGetBlockedMessages(t *testing.T) {
 	}, {
 		name: "error - enforce",
 		args: args{
-			engineResponses: []*engineapi.EngineResponse{
+			engineResponses: []*response.EngineResponse{
 				{
-					PolicyResponse: engineapi.PolicyResponse{
-						Policy: engineapi.PolicySpec{
+					PolicyResponse: response.PolicyResponse{
+						Policy: response.PolicySpec{
 							Name: "test",
 						},
 						ValidationFailureAction: "Enforce",
-						Rules: []engineapi.RuleResponse{
+						Rules: []response.RuleResponse{
 							{
 								Name:    "rule-error",
-								Status:  engineapi.RuleStatusError,
+								Status:  response.RuleStatusError,
 								Message: "message error",
 							},
 						},
-						Resource: engineapi.ResourceSpec{
+						Resource: response.ResourceSpec{
 							Kind:      "foo",
 							Namespace: "bar",
 							Name:      "baz",
@@ -253,26 +253,26 @@ func TestGetBlockedMessages(t *testing.T) {
 	}, {
 		name: "error and failure - enforce",
 		args: args{
-			engineResponses: []*engineapi.EngineResponse{
+			engineResponses: []*response.EngineResponse{
 				{
-					PolicyResponse: engineapi.PolicyResponse{
-						Policy: engineapi.PolicySpec{
+					PolicyResponse: response.PolicyResponse{
+						Policy: response.PolicySpec{
 							Name: "test",
 						},
 						ValidationFailureAction: "Enforce",
-						Rules: []engineapi.RuleResponse{
+						Rules: []response.RuleResponse{
 							{
 								Name:    "rule-fail",
-								Status:  engineapi.RuleStatusFail,
+								Status:  response.RuleStatusFail,
 								Message: "message fail",
 							},
 							{
 								Name:    "rule-error",
-								Status:  engineapi.RuleStatusError,
+								Status:  response.RuleStatusError,
 								Message: "message error",
 							},
 						},
-						Resource: engineapi.ResourceSpec{
+						Resource: response.ResourceSpec{
 							Kind:      "foo",
 							Namespace: "bar",
 							Name:      "baz",

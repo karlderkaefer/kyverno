@@ -13,8 +13,10 @@ import (
 	"github.com/kyverno/kyverno/pkg/clients/dclient"
 	"github.com/kyverno/kyverno/pkg/config"
 	"github.com/kyverno/kyverno/pkg/engine"
-	engineapi "github.com/kyverno/kyverno/pkg/engine/api"
+	"github.com/kyverno/kyverno/pkg/engine/context/resolvers"
+	"github.com/kyverno/kyverno/pkg/engine/response"
 	"github.com/kyverno/kyverno/pkg/event"
+	"github.com/kyverno/kyverno/pkg/registryclient"
 	"github.com/kyverno/kyverno/pkg/utils"
 	"go.uber.org/multierr"
 	yamlv2 "gopkg.in/yaml.v2"
@@ -29,14 +31,13 @@ type MutateExistingController struct {
 	// clients
 	client        dclient.Interface
 	statusControl common.StatusControlInterface
-	contextLoader engine.ContextLoaderFactory
-
+	rclient       registryclient.Client
 	// listers
 	policyLister  kyvernov1listers.ClusterPolicyLister
 	npolicyLister kyvernov1listers.PolicyLister
 
 	configuration          config.Configuration
-	informerCacheResolvers engineapi.ConfigmapResolver
+	informerCacheResolvers resolvers.ConfigmapResolver
 	eventGen               event.Interface
 
 	log logr.Logger
@@ -46,18 +47,18 @@ type MutateExistingController struct {
 func NewMutateExistingController(
 	client dclient.Interface,
 	statusControl common.StatusControlInterface,
-	contextLoader engine.ContextLoaderFactory,
+	rclient registryclient.Client,
 	policyLister kyvernov1listers.ClusterPolicyLister,
 	npolicyLister kyvernov1listers.PolicyLister,
 	dynamicConfig config.Configuration,
-	informerCacheResolvers engineapi.ConfigmapResolver,
+	informerCacheResolvers resolvers.ConfigmapResolver,
 	eventGen event.Interface,
 	log logr.Logger,
 ) *MutateExistingController {
 	c := MutateExistingController{
 		client:                 client,
 		statusControl:          statusControl,
-		contextLoader:          contextLoader,
+		rclient:                rclient,
 		policyLister:           policyLister,
 		npolicyLister:          npolicyLister,
 		configuration:          dynamicConfig,
@@ -97,22 +98,22 @@ func (c *MutateExistingController) ProcessUR(ur *kyvernov1beta1.UpdateRequest) e
 			continue
 		}
 
-		er := engine.Mutate(context.TODO(), c.contextLoader, policyContext)
+		er := engine.Mutate(context.TODO(), c.rclient, policyContext)
 		for _, r := range er.PolicyResponse.Rules {
 			patched := r.PatchedTarget
 			patchedTargetSubresourceName := r.PatchedTargetSubresourceName
 			switch r.Status {
-			case engineapi.RuleStatusFail, engineapi.RuleStatusError, engineapi.RuleStatusWarn:
+			case response.RuleStatusFail, response.RuleStatusError, response.RuleStatusWarn:
 				err := fmt.Errorf("failed to mutate existing resource, rule response%v: %s", r.Status, r.Message)
 				logger.Error(err, "")
 				errs = append(errs, err)
 				c.report(err, ur.Spec.Policy, rule.Name, patched)
 
-			case engineapi.RuleStatusSkip:
+			case response.RuleStatusSkip:
 				logger.Info("mutate existing rule skipped", "rule", r.Name, "message", r.Message)
 				c.report(err, ur.Spec.Policy, rule.Name, patched)
 
-			case engineapi.RuleStatusPass:
+			case response.RuleStatusPass:
 
 				patchedNew, err := addAnnotation(policy, patched, r)
 				if err != nil {
@@ -126,7 +127,7 @@ func (c *MutateExistingController) ProcessUR(ur *kyvernov1beta1.UpdateRequest) e
 					continue
 				}
 
-				if r.Status == engineapi.RuleStatusPass {
+				if r.Status == response.RuleStatusPass {
 					patchedNew.SetResourceVersion(patched.GetResourceVersion())
 					var updateErr error
 					if patchedTargetSubresourceName == "status" {
@@ -203,7 +204,7 @@ func updateURStatus(statusControl common.StatusControlInterface, ur kyvernov1bet
 	return nil
 }
 
-func addAnnotation(policy kyvernov1.PolicyInterface, patched *unstructured.Unstructured, r engineapi.RuleResponse) (patchedNew *unstructured.Unstructured, err error) {
+func addAnnotation(policy kyvernov1.PolicyInterface, patched *unstructured.Unstructured, r response.RuleResponse) (patchedNew *unstructured.Unstructured, err error) {
 	if patched == nil {
 		return
 	}
