@@ -26,7 +26,7 @@ import (
 	"github.com/kyverno/kyverno/pkg/autogen"
 	"github.com/kyverno/kyverno/pkg/background/generate"
 	"github.com/kyverno/kyverno/pkg/clients/dclient"
-	engineapi "github.com/kyverno/kyverno/pkg/engine/api"
+	"github.com/kyverno/kyverno/pkg/engine/response"
 	"github.com/kyverno/kyverno/pkg/openapi"
 	policy2 "github.com/kyverno/kyverno/pkg/policy"
 	gitutils "github.com/kyverno/kyverno/pkg/utils/git"
@@ -427,7 +427,7 @@ func getLocalDirTestFiles(fs billy.Filesystem, path, fileName string, rc *result
 	return errors
 }
 
-func buildPolicyResults(engineResponses []*engineapi.EngineResponse, testResults []api.TestResults, infos []common.Info, policyResourcePath string, fs billy.Filesystem, isGit bool) (map[string]policyreportv1alpha2.PolicyReportResult, []api.TestResults) {
+func buildPolicyResults(engineResponses []*response.EngineResponse, testResults []api.TestResults, infos []common.Info, policyResourcePath string, fs billy.Filesystem, isGit bool) (map[string]policyreportv1alpha2.PolicyReportResult, []api.TestResults) {
 	results := make(map[string]policyreportv1alpha2.PolicyReportResult)
 	now := metav1.Timestamp{Seconds: time.Now().Unix()}
 
@@ -542,7 +542,7 @@ func buildPolicyResults(engineResponses []*engineapi.EngineResponse, testResults
 			}
 
 			for _, rule := range resp.PolicyResponse.Rules {
-				if rule.Type != engineapi.Generation || test.Rule != rule.Name {
+				if rule.Type != response.Generation || test.Rule != rule.Name {
 					continue
 				}
 
@@ -558,9 +558,9 @@ func buildPolicyResults(engineResponses []*engineapi.EngineResponse, testResults
 						continue
 					}
 
-					if rule.Status == engineapi.RuleStatusSkip {
+					if rule.Status == response.RuleStatusSkip {
 						result.Result = policyreportv1alpha2.StatusSkip
-					} else if rule.Status == engineapi.RuleStatusError {
+					} else if rule.Status == response.RuleStatusError {
 						result.Result = policyreportv1alpha2.StatusError
 					} else {
 						var x string
@@ -576,7 +576,7 @@ func buildPolicyResults(engineResponses []*engineapi.EngineResponse, testResults
 		}
 
 		for _, rule := range resp.PolicyResponse.Rules {
-			if rule.Type != engineapi.Mutation {
+			if rule.Type != response.Mutation {
 				continue
 			}
 
@@ -592,9 +592,9 @@ func buildPolicyResults(engineResponses []*engineapi.EngineResponse, testResults
 					continue
 				}
 
-				if rule.Status == engineapi.RuleStatusSkip {
+				if rule.Status == response.RuleStatusSkip {
 					result.Result = policyreportv1alpha2.StatusSkip
-				} else if rule.Status == engineapi.RuleStatusError {
+				} else if rule.Status == response.RuleStatusError {
 					result.Result = policyreportv1alpha2.StatusError
 				} else {
 					var x string
@@ -616,7 +616,7 @@ func buildPolicyResults(engineResponses []*engineapi.EngineResponse, testResults
 	for _, info := range infos {
 		for _, infoResult := range info.Results {
 			for _, rule := range infoResult.Rules {
-				if rule.Type != string(engineapi.Validation) && rule.Type != string(engineapi.ImageVerify) {
+				if rule.Type != string(response.Validation) && rule.Type != string(response.ImageVerify) {
 					continue
 				}
 
@@ -707,10 +707,10 @@ func getAndCompareResource(path string, engineResource unstructured.Unstructured
 	return status
 }
 
-func buildMessage(resp *engineapi.EngineResponse) string {
+func buildMessage(resp *response.EngineResponse) string {
 	var bldr strings.Builder
 	for _, ruleResp := range resp.PolicyResponse.Rules {
-		fmt.Fprintf(&bldr, "  %s: %s \n", ruleResp.Name, ruleResp.Status)
+		fmt.Fprintf(&bldr, "  %s: %s \n", ruleResp.Name, ruleResp.Status.String())
 		fmt.Fprintf(&bldr, "    %s \n", ruleResp.Message)
 	}
 
@@ -731,7 +731,7 @@ func getFullPath(paths []string, policyResourcePath string, isGit bool) []string
 }
 
 func applyPoliciesFromPath(fs billy.Filesystem, policyBytes []byte, isGit bool, policyResourcePath string, rc *resultCounts, openApiManager openapi.Manager, tf *testFilter, failOnly, removeColor bool) (err error) {
-	engineResponses := make([]*engineapi.EngineResponse, 0)
+	engineResponses := make([]*response.EngineResponse, 0)
 	var dClient dclient.Interface
 	values := &api.Test{}
 	var variablesString string
@@ -778,7 +778,7 @@ func applyPoliciesFromPath(fs billy.Filesystem, policyBytes []byte, isGit bool, 
 			fmt.Printf("Error: failed to load request info\nCause: %s\n", err)
 			os.Exit(1)
 		}
-		store.SetSubject(subjectInfo.Subject)
+		store.SetSubjects(subjectInfo)
 	}
 
 	policyFullPath := getFullPath(values.Policies, policyResourcePath, isGit)

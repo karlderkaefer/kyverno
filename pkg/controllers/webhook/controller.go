@@ -95,7 +95,6 @@ type controller struct {
 	// config
 	server             string
 	defaultTimeout     int32
-	servicePort        int32
 	autoUpdateWebhooks bool
 	admissionReports   bool
 	runtime            runtimeutils.Runtime
@@ -121,7 +120,6 @@ func NewController(
 	clusterroleInformer rbacv1informers.ClusterRoleInformer,
 	server string,
 	defaultTimeout int32,
-	servicePort int32,
 	autoUpdateWebhooks bool,
 	admissionReports bool,
 	runtime runtimeutils.Runtime,
@@ -144,7 +142,6 @@ func NewController(
 		queue:              queue,
 		server:             server,
 		defaultTimeout:     defaultTimeout,
-		servicePort:        servicePort,
 		autoUpdateWebhooks: autoUpdateWebhooks,
 		admissionReports:   admissionReports,
 		runtime:            runtime,
@@ -328,7 +325,6 @@ func (c *controller) clientConfig(caBundle []byte, path string) admissionregistr
 			Namespace: config.KyvernoNamespace(),
 			Name:      config.KyvernoServiceName(),
 			Path:      &path,
-			Port:      &c.servicePort,
 		}
 	} else {
 		url := fmt.Sprintf("https://%s%s", c.server, path)

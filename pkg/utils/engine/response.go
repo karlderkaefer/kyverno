@@ -2,11 +2,11 @@ package engine
 
 import (
 	kyvernov1 "github.com/kyverno/kyverno/api/kyverno/v1"
-	engineapi "github.com/kyverno/kyverno/pkg/engine/api"
+	"github.com/kyverno/kyverno/pkg/engine/response"
 )
 
 // IsResponseSuccessful return true if all responses are successful
-func IsResponseSuccessful(engineReponses []*engineapi.EngineResponse) bool {
+func IsResponseSuccessful(engineReponses []*response.EngineResponse) bool {
 	for _, er := range engineReponses {
 		if !er.IsSuccessful() {
 			return false
@@ -18,7 +18,7 @@ func IsResponseSuccessful(engineReponses []*engineapi.EngineResponse) bool {
 // BlockRequest returns true when:
 // 1. a policy fails (i.e. creates a violation) and validationFailureAction is set to 'enforce'
 // 2. a policy has a processing error and failurePolicy is set to 'Fail`
-func BlockRequest(er *engineapi.EngineResponse, failurePolicy kyvernov1.FailurePolicyType) bool {
+func BlockRequest(er *response.EngineResponse, failurePolicy kyvernov1.FailurePolicyType) bool {
 	if er.IsFailed() && er.GetValidationFailureAction().Enforce() {
 		return true
 	}

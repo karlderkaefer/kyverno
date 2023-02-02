@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/kyverno/kyverno/pkg/toggle"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
@@ -14,35 +13,25 @@ type ValidationFailureAction string
 
 // Policy Reporting Modes
 const (
-	// auditOld doesn't block the request on failure
-	// DEPRECATED: use Audit instead
-	auditOld ValidationFailureAction = "audit"
 	// enforceOld blocks the request on failure
-	// DEPRECATED: use Enforce instead
+	// DEPRECATED: use enforce instead
 	enforceOld ValidationFailureAction = "enforce"
-	// Enforce blocks the request on failure
-	Enforce ValidationFailureAction = "Enforce"
-	// Audit doesn't block the request on failure
-	Audit ValidationFailureAction = "Audit"
+	// enforce blocks the request on failure
+	enforce ValidationFailureAction = "Enforce"
 )
 
 func (a ValidationFailureAction) Enforce() bool {
-	return a == Enforce || a == enforceOld
+	return a == enforce || a == enforceOld
 }
 
 func (a ValidationFailureAction) Audit() bool {
 	return !a.Enforce()
 }
 
-func (a ValidationFailureAction) IsValid() bool {
-	return a == enforceOld || a == auditOld || a == Enforce || a == Audit
-}
-
 type ValidationFailureActionOverride struct {
 	// +kubebuilder:validation:Enum=audit;enforce;Audit;Enforce
-	Action            ValidationFailureAction `json:"action,omitempty" yaml:"action,omitempty"`
-	Namespaces        []string                `json:"namespaces,omitempty" yaml:"namespaces,omitempty"`
-	NamespaceSelector *metav1.LabelSelector   `json:"namespaceSelector,omitempty" yaml:"namespaceSelector,omitempty"`
+	Action     ValidationFailureAction `json:"action,omitempty" yaml:"action,omitempty"`
+	Namespaces []string                `json:"namespaces,omitempty" yaml:"namespaces,omitempty"`
 }
 
 // Spec contains a list of Rule instances and other policy controls.

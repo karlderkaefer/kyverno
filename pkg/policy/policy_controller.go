@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/big"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -22,12 +23,15 @@ import (
 	"github.com/kyverno/kyverno/pkg/clients/dclient"
 	"github.com/kyverno/kyverno/pkg/config"
 	"github.com/kyverno/kyverno/pkg/engine"
-	engineapi "github.com/kyverno/kyverno/pkg/engine/api"
+	"github.com/kyverno/kyverno/pkg/engine/context/resolvers"
+	"github.com/kyverno/kyverno/pkg/engine/response"
 	"github.com/kyverno/kyverno/pkg/event"
 	"github.com/kyverno/kyverno/pkg/metrics"
-	engineutils "github.com/kyverno/kyverno/pkg/utils/engine"
+	"github.com/kyverno/kyverno/pkg/registryclient"
 	kubeutils "github.com/kyverno/kyverno/pkg/utils/kube"
+	"github.com/pkg/errors"
 	"go.uber.org/multierr"
+	"golang.org/x/exp/slices"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -57,7 +61,7 @@ const (
 type PolicyController struct {
 	client        dclient.Interface
 	kyvernoClient versioned.Interface
-	contextLoader engineapi.ContextLoaderFactory
+	rclient       registryclient.Client
 
 	pInformer  kyvernov1informers.ClusterPolicyInformer
 	npInformer kyvernov1informers.PolicyInformer
@@ -80,7 +84,7 @@ type PolicyController struct {
 	// nsLister can list/get namespaces from the shared informer's store
 	nsLister corev1listers.NamespaceLister
 
-	informerCacheResolvers engineapi.ConfigmapResolver
+	informerCacheResolvers resolvers.ConfigmapResolver
 
 	informersSynced []cache.InformerSynced
 
@@ -98,14 +102,14 @@ type PolicyController struct {
 func NewPolicyController(
 	kyvernoClient versioned.Interface,
 	client dclient.Interface,
-	contextLoader engineapi.ContextLoaderFactory,
+	rclient registryclient.Client,
 	pInformer kyvernov1informers.ClusterPolicyInformer,
 	npInformer kyvernov1informers.PolicyInformer,
 	urInformer kyvernov1beta1informers.UpdateRequestInformer,
 	configHandler config.Configuration,
 	eventGen event.Interface,
 	namespaces corev1informers.NamespaceInformer,
-	informerCacheResolvers engineapi.ConfigmapResolver,
+	informerCacheResolvers resolvers.ConfigmapResolver,
 	log logr.Logger,
 	reconcilePeriod time.Duration,
 	metricsConfig metrics.MetricsConfigManager,
@@ -119,7 +123,7 @@ func NewPolicyController(
 	pc := PolicyController{
 		client:                 client,
 		kyvernoClient:          kyvernoClient,
-		contextLoader:          contextLoader,
+		rclient:                rclient,
 		pInformer:              pInformer,
 		npInformer:             npInformer,
 		eventGen:               eventGen,
@@ -508,19 +512,18 @@ func (pc *PolicyController) updateUR(policyKey string, policy kyvernov1.PolicyIn
 }
 
 func (pc *PolicyController) handleUpdateRequest(ur *kyvernov1beta1.UpdateRequest, triggerResource *unstructured.Unstructured, rule kyvernov1.Rule, policy kyvernov1.PolicyInterface) (skip bool, err error) {
-	namespaceLabels := engineutils.GetNamespaceSelectorsFromNamespaceLister(triggerResource.GetKind(), triggerResource.GetNamespace(), pc.nsLister, pc.log)
-	policyContext, _, err := backgroundcommon.NewBackgroundContext(pc.client, ur, policy, triggerResource, pc.configHandler, pc.informerCacheResolvers, namespaceLabels, pc.log)
+	policyContext, _, err := backgroundcommon.NewBackgroundContext(pc.client, ur, policy, triggerResource, pc.configHandler, pc.informerCacheResolvers, nil, pc.log)
 	if err != nil {
-		return false, fmt.Errorf("failed to build policy context for rule %s: %w", rule.Name, err)
+		return false, errors.Wrapf(err, "failed to build policy context for rule %s", rule.Name)
 	}
 
-	engineResponse := engine.ApplyBackgroundChecks(pc.contextLoader, policyContext)
+	engineResponse := engine.ApplyBackgroundChecks(pc.rclient, policyContext)
 	if len(engineResponse.PolicyResponse.Rules) == 0 {
 		return true, nil
 	}
 
 	for _, ruleResponse := range engineResponse.PolicyResponse.Rules {
-		if ruleResponse.Status != engineapi.RuleStatusPass {
+		if ruleResponse.Status != response.RuleStatusPass {
 			pc.log.Error(err, "can not create new UR on policy update", "policy", policy.GetName(), "rule", rule.Name, "rule.Status", ruleResponse.Status)
 			continue
 		}
@@ -590,4 +593,43 @@ func updateUR(kyvernoClient versioned.Interface, urLister kyvernov1beta1listers.
 			}
 		}
 	}
+}
+
+func missingAutoGenRules(policy kyvernov1.PolicyInterface, log logr.Logger) bool {
+	var podRuleName []string
+	ruleCount := 1
+	spec := policy.GetSpec()
+	if canApplyAutoGen, _ := autogen.CanAutoGen(spec); canApplyAutoGen {
+		for _, rule := range autogen.ComputeRules(policy) {
+			podRuleName = append(podRuleName, rule.Name)
+		}
+	}
+
+	if len(podRuleName) > 0 {
+		annotations := policy.GetAnnotations()
+		val, ok := annotations[kyvernov1.PodControllersAnnotation]
+		if !ok {
+			return true
+		}
+		if val == "none" {
+			return false
+		}
+		res := strings.Split(val, ",")
+
+		if len(res) == 1 {
+			ruleCount = 2
+		}
+		if len(res) > 1 {
+			if slices.Contains(res, "CronJob") {
+				ruleCount = 3
+			} else {
+				ruleCount = 2
+			}
+		}
+
+		if len(autogen.ComputeRules(policy)) != (ruleCount * len(podRuleName)) {
+			return true
+		}
+	}
+	return false
 }

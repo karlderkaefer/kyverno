@@ -3,7 +3,7 @@ package wildcards
 import (
 	"strings"
 
-	"github.com/kyverno/kyverno/pkg/engine/anchor"
+	commonAnchor "github.com/kyverno/kyverno/pkg/engine/anchor"
 	wildcard "github.com/kyverno/kyverno/pkg/utils/wildcard"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -27,6 +27,7 @@ func replaceWildcardsInMapKeyValues(patternMap map[string]string, resourceMap ma
 			result[k] = v
 		}
 	}
+
 	return result
 }
 
@@ -40,10 +41,12 @@ func expandWildcards(k, v string, resourceMap map[string]string, matchValue, rep
 			}
 		}
 	}
+
 	if replace {
 		k = replaceWildCardChars(k)
 		v = replaceWildCardChars(v)
 	}
+
 	return k, v
 }
 
@@ -75,22 +78,23 @@ func ExpandInMetadata(patternMap, resourceMap map[string]interface{}) map[string
 	if labels != nil {
 		metadata[labelsKey] = labels
 	}
+
 	annotationsKey, annotations := expandWildcardsInTag("annotations", patternMetadata, resourceMetadata)
 	if annotations != nil {
 		metadata[annotationsKey] = annotations
 	}
+
 	return patternMap
 }
 
 func getPatternValue(tag string, pattern map[string]interface{}) (string, interface{}) {
 	for k, v := range pattern {
-		if k == tag {
-			return k, v
-		}
-		if a := anchor.Parse(k); a != nil && a.Key() == tag {
+		k2, _ := commonAnchor.RemoveAnchor(k)
+		if k2 == tag {
 			return k, v
 		}
 	}
+
 	return "", nil
 }
 
@@ -136,16 +140,17 @@ func replaceWildcardsInMapKeys(patternData, resourceData map[string]string) map[
 	results := map[string]interface{}{}
 	for k, v := range patternData {
 		if wildcard.ContainsWildcard(k) {
-			if a := anchor.Parse(k); a != nil {
-				matchK, _ := expandWildcards(a.Key(), v, resourceData, false, false)
-				results[anchor.String(a.Type(), matchK)] = v
-			} else {
-				matchK, _ := expandWildcards(k, v, resourceData, false, false)
-				results[matchK] = v
+			anchorFreeKey, anchorPrefix := commonAnchor.RemoveAnchor(k)
+			matchK, _ := expandWildcards(anchorFreeKey, v, resourceData, false, false)
+			if anchorPrefix != "" {
+				matchK = commonAnchor.AddAnchor(matchK, anchorPrefix)
 			}
+
+			results[matchK] = v
 		} else {
 			results[k] = v
 		}
 	}
+
 	return results
 }
