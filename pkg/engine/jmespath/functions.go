@@ -450,14 +450,14 @@ func GetFunctions() []*FunctionEntry {
 			Entry: &gojmespath.FunctionEntry{
 				Name: items,
 				Arguments: []ArgSpec{
-					{Types: []JpType{JpObject, JpArray}},
+					{Types: []JpType{JpObject}},
 					{Types: []JpType{JpString}},
 					{Types: []JpType{JpString}},
 				},
 				Handler: jpItems,
 			},
 			ReturnType: []JpType{JpArray},
-			Note:       "converts a map or array to an array of objects where each key:value is an item in the array",
+			Note:       "converts a map to an array of objects where each key:value is an item in the array",
 		},
 		{
 			Entry: &gojmespath.FunctionEntry{
@@ -984,6 +984,10 @@ func jpParseYAML(arguments []interface{}) (interface{}, error) {
 }
 
 func jpItems(arguments []interface{}) (interface{}, error) {
+	input, ok := arguments[0].(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf(invalidArgumentTypeError, arguments, 0, "Object")
+	}
 	keyName, ok := arguments[1].(string)
 	if !ok {
 		return nil, fmt.Errorf(invalidArgumentTypeError, arguments, 1, "String")
@@ -992,34 +996,26 @@ func jpItems(arguments []interface{}) (interface{}, error) {
 	if !ok {
 		return nil, fmt.Errorf(invalidArgumentTypeError, arguments, 2, "String")
 	}
-	switch input := arguments[0].(type) {
-	case map[string]interface{}:
-		keys := make([]string, 0, len(input))
-		// Sort the keys so that the output is deterministic
-		for key := range input {
-			keys = append(keys, key)
-		}
-		sort.Strings(keys)
-		arrayOfObj := make([]map[string]interface{}, 0, len(input))
-		for _, key := range keys {
-			arrayOfObj = append(arrayOfObj, map[string]interface{}{
-				keyName: key,
-				valName: input[key],
-			})
-		}
-		return arrayOfObj, nil
-	case []interface{}:
-		arrayOfObj := make([]map[string]interface{}, 0, len(input))
-		for index, value := range input {
-			arrayOfObj = append(arrayOfObj, map[string]interface{}{
-				keyName: float64(index),
-				valName: value,
-			})
-		}
-		return arrayOfObj, nil
-	default:
-		return nil, fmt.Errorf(invalidArgumentTypeError, arguments, 0, "Object or Array")
+
+	arrayOfObj := make([]map[string]interface{}, 0)
+
+	keys := []string{}
+
+	// Sort the keys so that the output is deterministic
+	for key := range input {
+		keys = append(keys, key)
 	}
+
+	sort.Strings(keys)
+
+	for _, key := range keys {
+		m := make(map[string]interface{})
+		m[keyName] = key
+		m[valName] = input[key]
+		arrayOfObj = append(arrayOfObj, m)
+	}
+
+	return arrayOfObj, nil
 }
 
 func jpObjectFromLists(arguments []interface{}) (interface{}, error) {
@@ -1072,6 +1068,7 @@ func validateArg(f string, arguments []interface{}, index int, expectedType refl
 	if arg.Type().Kind() != expectedType {
 		return reflect.Value{}, fmt.Errorf(invalidArgumentTypeError, f, index+1, expectedType.String())
 	}
+
 	return arg, nil
 }
 

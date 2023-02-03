@@ -2,6 +2,7 @@ package cleanup
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -9,7 +10,6 @@ import (
 	kyvernov2alpha1 "github.com/kyverno/kyverno/api/kyverno/v2alpha1"
 	kyvernov2alpha1listers "github.com/kyverno/kyverno/pkg/client/listers/kyverno/v2alpha1"
 	"github.com/kyverno/kyverno/pkg/clients/dclient"
-	"github.com/kyverno/kyverno/pkg/config"
 	enginecontext "github.com/kyverno/kyverno/pkg/engine/context"
 	"github.com/kyverno/kyverno/pkg/event"
 	controllerutils "github.com/kyverno/kyverno/pkg/utils/controller"
@@ -43,11 +43,11 @@ func New(
 		cpolLister: cpolLister,
 		polLister:  polLister,
 		nsLister:   nsLister,
-		recorder:   event.NewRecorder(event.CleanupController, client.GetEventsInterface()),
+		recorder:   newRecorder(client),
 	}
 }
 
-func (h *handlers) Cleanup(ctx context.Context, logger logr.Logger, name string, _ time.Time, cfg config.Configuration) error {
+func (h *handlers) Cleanup(ctx context.Context, logger logr.Logger, name string, _ time.Time) error {
 	logger.Info("cleaning up...")
 	defer logger.Info("done")
 	namespace, name, err := cache.SplitMetaNamespaceKey(name)
@@ -58,7 +58,7 @@ func (h *handlers) Cleanup(ctx context.Context, logger logr.Logger, name string,
 	if err != nil {
 		return err
 	}
-	return h.executePolicy(ctx, logger, policy, cfg)
+	return h.executePolicy(ctx, logger, policy)
 }
 
 func (h *handlers) lookupPolicy(namespace, name string) (kyvernov2alpha1.CleanupPolicyInterface, error) {
@@ -69,7 +69,7 @@ func (h *handlers) lookupPolicy(namespace, name string) (kyvernov2alpha1.Cleanup
 	}
 }
 
-func (h *handlers) executePolicy(ctx context.Context, logger logr.Logger, policy kyvernov2alpha1.CleanupPolicyInterface, cfg config.Configuration) error {
+func (h *handlers) executePolicy(ctx context.Context, logger logr.Logger, policy kyvernov2alpha1.CleanupPolicyInterface) error {
 	spec := policy.GetSpec()
 	kinds := sets.New(spec.MatchResources.GetKinds()...)
 	debug := logger.V(4)
@@ -149,7 +149,7 @@ func (h *handlers) executePolicy(ctx context.Context, logger logr.Logger, policy
 							errs = append(errs, err)
 							continue
 						}
-						if err := enginectx.AddImageInfos(&resource, cfg); err != nil {
+						if err := enginectx.AddImageInfos(&resource); err != nil {
 							debug.Error(err, "failed to add image infos in context")
 							errs = append(errs, err)
 							continue
@@ -188,26 +188,13 @@ func (h *handlers) createEvent(policy kyvernov2alpha1.CleanupPolicyInterface, re
 	} else if policy.GetNamespace() != "" {
 		cleanuppol = policy.(*kyvernov2alpha1.CleanupPolicy)
 	}
-	if err == nil {
-		h.recorder.Eventf(
-			cleanuppol,
-			corev1.EventTypeNormal,
-			string(event.PolicyApplied),
-			"successfully cleaned up the target resource %v/%v/%v",
-			resource.GetKind(),
-			resource.GetNamespace(),
-			resource.GetName(),
-		)
-	} else {
-		h.recorder.Eventf(
-			cleanuppol,
-			corev1.EventTypeWarning,
-			string(event.PolicyError),
-			"failed to clean up the target resource %v/%v/%v: %v",
-			resource.GetKind(),
-			resource.GetNamespace(),
-			resource.GetName(),
-			err.Error(),
-		)
+
+	switch err == nil {
+	case true:
+		msg := fmt.Sprintf("successfully cleaned up the target resource %v/%v/%v", resource.GetKind(), resource.GetNamespace(), resource.GetName())
+		h.recorder.Event(cleanuppol, corev1.EventTypeNormal, event.PolicyApplied.String(), msg)
+	case false:
+		msg := fmt.Sprintf("failed to clean up the target resource %v/%v/%v: %v", resource.GetKind(), resource.GetNamespace(), resource.GetName(), err.Error())
+		h.recorder.Event(cleanuppol, corev1.EventTypeWarning, event.PolicyError.String(), msg)
 	}
 }

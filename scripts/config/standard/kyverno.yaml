@@ -6,6 +6,9 @@ extraArgs:
   - --loggingFormat=json
   - --enablePolicyException
 
+generatecontrollerExtraResources:
+  - pods
+
 cleanupController:
   rbac:
     clusterRole:
@@ -14,20 +17,3 @@ cleanupController:
             - ''
           resources:
             - pods
-
-backgroundController:
-  rbac:
-    clusterRole:
-      extraResources:
-      - apiGroups:
-        - '*'
-        resources:
-        - configmaps
-        - secrets
-        - roles
-        - rolebindings
-        - limitranges
-        - namespaces
-        - nodes
-        - nodes/status
-        - pods

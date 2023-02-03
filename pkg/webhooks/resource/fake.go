@@ -7,7 +7,6 @@ import (
 	kyvernoinformers "github.com/kyverno/kyverno/pkg/client/informers/externalversions"
 	"github.com/kyverno/kyverno/pkg/clients/dclient"
 	"github.com/kyverno/kyverno/pkg/config"
-	"github.com/kyverno/kyverno/pkg/engine"
 	"github.com/kyverno/kyverno/pkg/engine/context/resolvers"
 	"github.com/kyverno/kyverno/pkg/event"
 	"github.com/kyverno/kyverno/pkg/metrics"
@@ -39,11 +38,10 @@ func NewFakeHandlers(ctx context.Context, policyCache policycache.Cache) webhook
 	crbLister := informers.Rbac().V1().ClusterRoleBindings().Lister()
 	urLister := kyvernoInformers.Kyverno().V1beta1().UpdateRequests().Lister().UpdateRequests(config.KyvernoNamespace())
 	peLister := kyvernoInformers.Kyverno().V2alpha1().PolicyExceptions().Lister()
-	rclient := registryclient.NewOrDie()
 
 	return &handlers{
 		client:         dclient,
-		rclient:        rclient,
+		rclient:        registryclient.NewOrDie(),
 		configuration:  configuration,
 		metricsConfig:  metricsConfig,
 		pCache:         policyCache,
@@ -56,7 +54,5 @@ func NewFakeHandlers(ctx context.Context, policyCache policycache.Cache) webhook
 		openApiManager: openapi.NewFake(),
 		pcBuilder:      webhookutils.NewPolicyContextBuilder(configuration, dclient, rbLister, crbLister, configMapResolver, peLister),
 		urUpdater:      webhookutils.NewUpdateRequestUpdater(kyvernoclient, urLister),
-		engine:         engine.NewEgine(),
-		contextLoader:  engine.LegacyContextLoaderFactory(rclient),
 	}
 }

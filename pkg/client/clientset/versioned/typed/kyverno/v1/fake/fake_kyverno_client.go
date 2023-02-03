@@ -32,6 +32,10 @@ func (c *FakeKyvernoV1) ClusterPolicies() v1.ClusterPolicyInterface {
 	return &FakeClusterPolicies{c}
 }
 
+func (c *FakeKyvernoV1) GenerateRequests(namespace string) v1.GenerateRequestInterface {
+	return &FakeGenerateRequests{c, namespace}
+}
+
 func (c *FakeKyvernoV1) Policies(namespace string) v1.PolicyInterface {
 	return &FakePolicies{c, namespace}
 }

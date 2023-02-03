@@ -13,6 +13,7 @@ import (
 	"github.com/kyverno/kyverno/pkg/engine"
 	"github.com/kyverno/kyverno/pkg/logging"
 	cmap "github.com/orcaman/concurrent-map/v2"
+	"github.com/pkg/errors"
 	"gopkg.in/yaml.v3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -159,7 +160,7 @@ func (o *manager) ValidatePolicyMutation(policy kyvernov1.PolicyInterface) error
 		if kind != "*" {
 			err = o.ValidateResource(*patchedResource.DeepCopy(), "", kind)
 			if err != nil {
-				return fmt.Errorf("mutate result violates resource schema: %w", err)
+				return errors.Wrapf(err, "mutate result violates resource schema")
 			}
 		}
 	}
@@ -240,13 +241,13 @@ func (c *manager) UpdateKindToAPIVersions(apiResourceLists, preferredAPIResource
 // For crd, we do not store definition in document
 func (o *manager) getCRDSchema(kind string) (proto.Schema, error) {
 	if kind == "" {
-		return nil, fmt.Errorf("invalid kind")
+		return nil, errors.New("invalid kind")
 	}
 
 	path := proto.NewPath(kind)
 	definition, _ := o.definitions.Get(kind)
 	if definition == nil {
-		return nil, fmt.Errorf("could not find definition")
+		return nil, errors.New("could not find definition")
 	}
 
 	// This was added so crd's can access

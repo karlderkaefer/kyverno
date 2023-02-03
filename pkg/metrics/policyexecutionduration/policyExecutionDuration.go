@@ -4,7 +4,7 @@ import (
 	"context"
 
 	kyvernov1 "github.com/kyverno/kyverno/api/kyverno/v1"
-	engineapi "github.com/kyverno/kyverno/pkg/engine/api"
+	"github.com/kyverno/kyverno/pkg/engine/response"
 	"github.com/kyverno/kyverno/pkg/metrics"
 )
 
@@ -32,7 +32,7 @@ func registerPolicyExecutionDurationMetric(
 
 // policy - policy related data
 // engineResponse - resource and rule related data
-func ProcessEngineResponse(ctx context.Context, m metrics.MetricsConfigManager, policy kyvernov1.PolicyInterface, engineResponse engineapi.EngineResponse, executionCause metrics.RuleExecutionCause, resourceRequestOperation metrics.ResourceRequestOperation) error {
+func ProcessEngineResponse(ctx context.Context, m metrics.MetricsConfigManager, policy kyvernov1.PolicyInterface, engineResponse response.EngineResponse, executionCause metrics.RuleExecutionCause, resourceRequestOperation metrics.ResourceRequestOperation) error {
 	name, namespace, policyType, backgroundMode, validationMode, err := metrics.GetPolicyInfos(policy)
 	if err != nil {
 		return err
@@ -45,20 +45,20 @@ func ProcessEngineResponse(ctx context.Context, m metrics.MetricsConfigManager, 
 		ruleType := metrics.ParseRuleTypeFromEngineRuleResponse(rule)
 		var ruleResult metrics.RuleResult
 		switch rule.Status {
-		case engineapi.RuleStatusPass:
+		case response.RuleStatusPass:
 			ruleResult = metrics.Pass
-		case engineapi.RuleStatusFail:
+		case response.RuleStatusFail:
 			ruleResult = metrics.Fail
-		case engineapi.RuleStatusWarn:
+		case response.RuleStatusWarn:
 			ruleResult = metrics.Warn
-		case engineapi.RuleStatusError:
+		case response.RuleStatusError:
 			ruleResult = metrics.Error
-		case engineapi.RuleStatusSkip:
+		case response.RuleStatusSkip:
 			ruleResult = metrics.Skip
 		default:
 			ruleResult = metrics.Fail
 		}
-		ruleExecutionLatencyInSeconds := float64(rule.ExecutionStats.ProcessingTime) / float64(1000*1000*1000)
+		ruleExecutionLatencyInSeconds := float64(rule.RuleStats.ProcessingTime) / float64(1000*1000*1000)
 		registerPolicyExecutionDurationMetric(
 			ctx,
 			m,

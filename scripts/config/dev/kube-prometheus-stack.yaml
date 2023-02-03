@@ -1,7 +1,7 @@
 kubeEtcd:
   service:
     enabled: true
-    targetPort: 2382
+    targetPort: 2381
 
 defaultRules:
   create: true

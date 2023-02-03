@@ -32,7 +32,7 @@ type server struct {
 type (
 	TlsProvider       = func() ([]byte, []byte, error)
 	ValidationHandler = func(context.Context, logr.Logger, *admissionv1.AdmissionRequest, time.Time) *admissionv1.AdmissionResponse
-	CleanupHandler    = func(context.Context, logr.Logger, string, time.Time, config.Configuration) error
+	CleanupHandler    = func(context.Context, logr.Logger, string, time.Time) error
 )
 
 type Probes interface {
@@ -48,14 +48,13 @@ func NewServer(
 	metricsConfig metrics.MetricsConfigManager,
 	debugModeOpts webhooks.DebugModeOptions,
 	probes Probes,
-	cfg config.Configuration,
 ) Server {
 	policyLogger := logging.WithName("cleanup-policy")
 	cleanupLogger := logging.WithName("cleanup")
 	cleanupHandlerFunc := func(w http.ResponseWriter, r *http.Request) {
 		policy := r.URL.Query().Get("policy")
 		logger := cleanupLogger.WithValues("policy", policy)
-		err := cleanupHandler(r.Context(), logger, policy, time.Now(), cfg)
+		err := cleanupHandler(r.Context(), logger, policy, time.Now())
 		if err == nil {
 			w.WriteHeader(http.StatusOK)
 		} else {

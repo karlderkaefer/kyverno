@@ -2322,6 +2322,37 @@ const APIResourceLists = `
           "patch",
           "update"
         ]
+      },
+      {
+        "name": "generaterequests",
+        "singularName": "generaterequest",
+        "namespaced": true,
+        "kind": "GenerateRequest",
+        "verbs": [
+          "delete",
+          "deletecollection",
+          "get",
+          "list",
+          "patch",
+          "create",
+          "update",
+          "watch"
+        ],
+        "shortNames": [
+          "gr"
+        ],
+        "storageVersionHash": "TeMup732PSY="
+      },
+      {
+        "name": "generaterequests/status",
+        "singularName": "",
+        "namespaced": true,
+        "kind": "GenerateRequest",
+        "verbs": [
+          "get",
+          "patch",
+          "update"
+        ]
       }
     ]
   },

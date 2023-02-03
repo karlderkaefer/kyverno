@@ -26,6 +26,8 @@ import (
 type Interface interface {
 	// ClusterPolicies returns a ClusterPolicyInformer.
 	ClusterPolicies() ClusterPolicyInformer
+	// GenerateRequests returns a GenerateRequestInformer.
+	GenerateRequests() GenerateRequestInformer
 	// Policies returns a PolicyInformer.
 	Policies() PolicyInformer
 }
@@ -44,6 +46,11 @@ func New(f internalinterfaces.SharedInformerFactory, namespace string, tweakList
 // ClusterPolicies returns a ClusterPolicyInformer.
 func (v *version) ClusterPolicies() ClusterPolicyInformer {
 	return &clusterPolicyInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
+}
+
+// GenerateRequests returns a GenerateRequestInformer.
+func (v *version) GenerateRequests() GenerateRequestInformer {
+	return &generateRequestInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
 // Policies returns a PolicyInformer.

@@ -18,9 +18,11 @@ import (
 	kyvernov1beta1listers "github.com/kyverno/kyverno/pkg/client/listers/kyverno/v1beta1"
 	"github.com/kyverno/kyverno/pkg/clients/dclient"
 	"github.com/kyverno/kyverno/pkg/config"
-	engineapi "github.com/kyverno/kyverno/pkg/engine/api"
+	"github.com/kyverno/kyverno/pkg/engine/context/resolvers"
 	"github.com/kyverno/kyverno/pkg/event"
+	"github.com/kyverno/kyverno/pkg/registryclient"
 	kubeutils "github.com/kyverno/kyverno/pkg/utils/kube"
+	"github.com/pkg/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -47,8 +49,7 @@ type controller struct {
 	// clients
 	client        dclient.Interface
 	kyvernoClient versioned.Interface
-	engine        engineapi.Engine
-	contextLoader engineapi.ContextLoaderFactory
+	rclient       registryclient.Client
 
 	// listers
 	cpolLister kyvernov1listers.ClusterPolicyLister
@@ -64,15 +65,14 @@ type controller struct {
 
 	eventGen               event.Interface
 	configuration          config.Configuration
-	informerCacheResolvers engineapi.ConfigmapResolver
+	informerCacheResolvers resolvers.ConfigmapResolver
 }
 
 // NewController returns an instance of the Generate-Request Controller
 func NewController(
 	kyvernoClient versioned.Interface,
 	client dclient.Interface,
-	engine engineapi.Engine,
-	contextLoader engineapi.ContextLoaderFactory,
+	rclient registryclient.Client,
 	cpolInformer kyvernov1informers.ClusterPolicyInformer,
 	polInformer kyvernov1informers.PolicyInformer,
 	urInformer kyvernov1beta1informers.UpdateRequestInformer,
@@ -80,14 +80,13 @@ func NewController(
 	podInformer corev1informers.PodInformer,
 	eventGen event.Interface,
 	dynamicConfig config.Configuration,
-	informerCacheResolvers engineapi.ConfigmapResolver,
+	informerCacheResolvers resolvers.ConfigmapResolver,
 ) Controller {
 	urLister := urInformer.Lister().UpdateRequests(config.KyvernoNamespace())
 	c := controller{
 		client:                 client,
 		kyvernoClient:          kyvernoClient,
-		engine:                 engine,
-		contextLoader:          contextLoader,
+		rclient:                rclient,
 		cpolLister:             cpolInformer.Lister(),
 		polLister:              polInformer.Lister(),
 		urLister:               urLister,
@@ -421,10 +420,10 @@ func (c *controller) processUR(ur *kyvernov1beta1.UpdateRequest) error {
 	statusControl := common.NewStatusControl(c.kyvernoClient, c.urLister)
 	switch ur.Spec.Type {
 	case kyvernov1beta1.Mutate:
-		ctrl := mutate.NewMutateExistingController(c.client, statusControl, c.engine, c.contextLoader, c.cpolLister, c.polLister, c.nsLister, c.configuration, c.informerCacheResolvers, c.eventGen, logger)
+		ctrl := mutate.NewMutateExistingController(c.client, statusControl, c.rclient, c.cpolLister, c.polLister, c.nsLister, c.configuration, c.informerCacheResolvers, c.eventGen, logger)
 		return ctrl.ProcessUR(ur)
 	case kyvernov1beta1.Generate:
-		ctrl := generate.NewGenerateController(c.client, c.kyvernoClient, statusControl, c.contextLoader, c.cpolLister, c.polLister, c.urLister, c.nsLister, c.configuration, c.informerCacheResolvers, c.eventGen, logger)
+		ctrl := generate.NewGenerateController(c.client, c.kyvernoClient, statusControl, c.rclient, c.cpolLister, c.polLister, c.urLister, c.nsLister, c.configuration, c.informerCacheResolvers, c.eventGen, logger)
 		return ctrl.ProcessUR(ur)
 	}
 	return nil
@@ -519,7 +518,7 @@ func (c *controller) processDeletePolicyForCloneGenerateRule(policy kyvernov1.Po
 func (c *controller) updateSourceResource(pName string, rule kyvernov1.Rule) error {
 	obj, err := c.client.GetResource(context.TODO(), "", rule.Generation.Kind, rule.Generation.Clone.Namespace, rule.Generation.Clone.Name)
 	if err != nil {
-		return fmt.Errorf("source resource %s/%s/%s not found: %w", rule.Generation.Kind, rule.Generation.Clone.Namespace, rule.Generation.Clone.Name, err)
+		return errors.Wrapf(err, "source resource %s/%s/%s not found", rule.Generation.Kind, rule.Generation.Clone.Namespace, rule.Generation.Clone.Name)
 	}
 
 	var update bool
