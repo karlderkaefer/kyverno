@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"strings"
 
-	engineapi "github.com/kyverno/kyverno/pkg/engine/api"
+	"github.com/kyverno/kyverno/pkg/engine/response"
 )
 
-func GetErrorMsg(engineReponses []*engineapi.EngineResponse) string {
+func GetErrorMsg(engineReponses []*response.EngineResponse) string {
 	var str []string
 	var resourceInfo string
 	for _, er := range engineReponses {
@@ -16,8 +16,8 @@ func GetErrorMsg(engineReponses []*engineapi.EngineResponse) string {
 			resourceInfo = fmt.Sprintf("%s/%s/%s", er.PolicyResponse.Resource.Kind, er.PolicyResponse.Resource.Namespace, er.PolicyResponse.Resource.Name)
 			str = append(str, fmt.Sprintf("failed policy %s:", er.PolicyResponse.Policy.Name))
 			for _, rule := range er.PolicyResponse.Rules {
-				if rule.Status != engineapi.RuleStatusPass {
-					str = append(str, rule.String())
+				if rule.Status != response.RuleStatusPass {
+					str = append(str, rule.ToString())
 				}
 			}
 		}

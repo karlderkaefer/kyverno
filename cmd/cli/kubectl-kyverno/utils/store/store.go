@@ -5,49 +5,29 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 )
 
-type Context struct {
-	Policies []Policy `json:"policies"`
-}
-
-type Policy struct {
-	Name  string `json:"name"`
-	Rules []Rule `json:"rules"`
-}
-
-type Rule struct {
-	Name          string                   `json:"name"`
-	Values        map[string]interface{}   `json:"values"`
-	ForEachValues map[string][]interface{} `json:"foreachValues"`
-}
-
-type Subject struct {
-	Subject rbacv1.Subject `json:"subject,omitempty" yaml:"subject,omitempty"`
-}
-
 var (
-	mock           bool
+	Mock           bool
 	registryClient registryclient.Client
-	allowApiCalls  bool
-	policies       []Policy
-	// contextVar     Context
-	foreachElement int
-	subject        rbacv1.Subject
+	AllowApiCalls  bool
+	ContextVar     Context
+	ForeachElement int
+	Subjects       Subject
 )
 
-func SetMock(m bool) {
-	mock = m
+func SetMock(mock bool) {
+	Mock = mock
 }
 
-func IsMock() bool {
-	return mock
+func GetMock() bool {
+	return Mock
 }
 
-func SetForEachElement(element int) {
-	foreachElement = element
+func SetForEachElement(foreachElement int) {
+	ForeachElement = foreachElement
 }
 
 func GetForeachElement() int {
-	return foreachElement
+	return ForeachElement
 }
 
 func SetRegistryAccess(access bool) {
@@ -64,16 +44,16 @@ func GetRegistryClient() registryclient.Client {
 	return registryClient
 }
 
-func SetPolicies(p ...Policy) {
-	policies = p
+func SetContext(context Context) {
+	ContextVar = context
 }
 
-func HasPolicies() bool {
-	return len(policies) != 0
+func GetContext() Context {
+	return ContextVar
 }
 
-func GetPolicy(policyName string) *Policy {
-	for _, policy := range policies {
+func GetPolicyFromContext(policyName string) *Policy {
+	for _, policy := range ContextVar.Policies {
 		if policy.Name == policyName {
 			return &policy
 		}
@@ -81,8 +61,8 @@ func GetPolicy(policyName string) *Policy {
 	return nil
 }
 
-func GetPolicyRule(policyName string, ruleName string) *Rule {
-	for _, policy := range policies {
+func GetPolicyRuleFromContext(policyName string, ruleName string) *Rule {
+	for _, policy := range ContextVar.Policies {
 		if policy.Name == policyName {
 			for _, rule := range policy.Rules {
 				if rule.Name == ruleName {
@@ -94,18 +74,37 @@ func GetPolicyRule(policyName string, ruleName string) *Rule {
 	return nil
 }
 
-func SetSubject(s rbacv1.Subject) {
-	subject = s
+type Context struct {
+	Policies []Policy `json:"policies"`
 }
 
-func GetSubject() rbacv1.Subject {
-	return subject
+type Policy struct {
+	Name  string `json:"name"`
+	Rules []Rule `json:"rules"`
+}
+
+type Rule struct {
+	Name          string                   `json:"name"`
+	Values        map[string]interface{}   `json:"values"`
+	ForEachValues map[string][]interface{} `json:"foreachValues"`
+}
+
+func SetSubjects(subjects Subject) {
+	Subjects = subjects
+}
+
+func GetSubjects() Subject {
+	return Subjects
+}
+
+type Subject struct {
+	Subject rbacv1.Subject `json:"subject,omitempty" yaml:"subject,omitempty"`
 }
 
 func AllowApiCall(allow bool) {
-	allowApiCalls = allow
+	AllowApiCalls = allow
 }
 
-func IsApiCallAllowed() bool {
-	return allowApiCalls
+func IsAllowApiCall() bool {
+	return AllowApiCalls
 }

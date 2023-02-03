@@ -4,14 +4,14 @@ import (
 	"testing"
 
 	v1 "github.com/kyverno/kyverno/api/kyverno/v1"
-	engineapi "github.com/kyverno/kyverno/pkg/engine/api"
+	"github.com/kyverno/kyverno/pkg/engine/response"
 	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func TestGetWarningMessages(t *testing.T) {
 	type args struct {
-		engineResponses []*engineapi.EngineResponse
+		engineResponses []*response.EngineResponse
 	}
 	tests := []struct {
 		name string
@@ -23,22 +23,22 @@ func TestGetWarningMessages(t *testing.T) {
 		want: nil,
 	}, {
 		name: "enmpty response",
-		args: args{[]*engineapi.EngineResponse{}},
+		args: args{[]*response.EngineResponse{}},
 		want: nil,
 	}, {
 		name: "warning",
-		args: args{[]*engineapi.EngineResponse{
+		args: args{[]*response.EngineResponse{
 			{
 				Policy: &v1.ClusterPolicy{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "test",
 					},
 				},
-				PolicyResponse: engineapi.PolicyResponse{
-					Rules: []engineapi.RuleResponse{
+				PolicyResponse: response.PolicyResponse{
+					Rules: []response.RuleResponse{
 						{
 							Name:    "rule",
-							Status:  engineapi.RuleStatusWarn,
+							Status:  response.RuleStatusWarn,
 							Message: "message warn",
 						},
 					},
@@ -50,38 +50,38 @@ func TestGetWarningMessages(t *testing.T) {
 		},
 	}, {
 		name: "multiple rules",
-		args: args{[]*engineapi.EngineResponse{
+		args: args{[]*response.EngineResponse{
 			{
 				Policy: &v1.ClusterPolicy{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "test",
 					},
 				},
-				PolicyResponse: engineapi.PolicyResponse{
-					Rules: []engineapi.RuleResponse{
+				PolicyResponse: response.PolicyResponse{
+					Rules: []response.RuleResponse{
 						{
 							Name:    "rule-pass",
-							Status:  engineapi.RuleStatusPass,
+							Status:  response.RuleStatusPass,
 							Message: "message pass",
 						},
 						{
 							Name:    "rule-warn",
-							Status:  engineapi.RuleStatusWarn,
+							Status:  response.RuleStatusWarn,
 							Message: "message warn",
 						},
 						{
 							Name:    "rule-fail",
-							Status:  engineapi.RuleStatusFail,
+							Status:  response.RuleStatusFail,
 							Message: "message fail",
 						},
 						{
 							Name:    "rule-error",
-							Status:  engineapi.RuleStatusError,
+							Status:  response.RuleStatusError,
 							Message: "message error",
 						},
 						{
 							Name:    "rule-skip",
-							Status:  engineapi.RuleStatusSkip,
+							Status:  response.RuleStatusSkip,
 							Message: "message skip",
 						},
 					},

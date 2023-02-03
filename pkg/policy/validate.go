@@ -3,7 +3,6 @@ package policy
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"reflect"
 	"regexp"
@@ -26,6 +25,7 @@ import (
 	apiutils "github.com/kyverno/kyverno/pkg/utils/api"
 	kubeutils "github.com/kyverno/kyverno/pkg/utils/kube"
 	"github.com/kyverno/kyverno/pkg/utils/wildcard"
+	"github.com/pkg/errors"
 	"golang.org/x/exp/slices"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -97,7 +97,7 @@ func validateJSONPatch(patch string, ruleIdx int) error {
 	for _, operation := range decodedPatch {
 		op := operation.Kind()
 		if op != "add" && op != "remove" && op != "replace" {
-			return fmt.Errorf("unexpected kind: spec.rules[%d]: %s", ruleIdx, op)
+			return fmt.Errorf("Unexpected kind: spec.rules[%d]: %s", ruleIdx, op)
 		}
 		v, _ := operation.ValueInterface()
 		if v != nil {
@@ -292,7 +292,7 @@ func Validate(policy kyvernov1.PolicyInterface, client dclient.Interface, mock b
 			if !slices.Contains(value.ResourceDescription.Kinds, "*") {
 				err := validateKinds(value.ResourceDescription.Kinds, mock, background, rule.HasValidate(), client)
 				if err != nil {
-					return warnings, fmt.Errorf("the kind defined in the any match resource is invalid: %w", err)
+					return warnings, errors.Wrapf(err, "the kind defined in the any match resource is invalid")
 				}
 			}
 		}
@@ -304,7 +304,7 @@ func Validate(policy kyvernov1.PolicyInterface, client dclient.Interface, mock b
 			if !slices.Contains(value.ResourceDescription.Kinds, "*") {
 				err := validateKinds(value.ResourceDescription.Kinds, mock, background, rule.HasValidate(), client)
 				if err != nil {
-					return warnings, fmt.Errorf("the kind defined in the all match resource is invalid: %w", err)
+					return warnings, errors.Wrapf(err, "the kind defined in the all match resource is invalid")
 				}
 			}
 		}
@@ -316,7 +316,7 @@ func Validate(policy kyvernov1.PolicyInterface, client dclient.Interface, mock b
 			if !slices.Contains(value.ResourceDescription.Kinds, "*") {
 				err := validateKinds(value.ResourceDescription.Kinds, mock, background, rule.HasValidate(), client)
 				if err != nil {
-					return warnings, fmt.Errorf("the kind defined in the any exclude resource is invalid: %w", err)
+					return warnings, errors.Wrapf(err, "the kind defined in the any exclude resource is invalid")
 				}
 			}
 		}
@@ -328,7 +328,7 @@ func Validate(policy kyvernov1.PolicyInterface, client dclient.Interface, mock b
 			if !slices.Contains(value.ResourceDescription.Kinds, "*") {
 				err := validateKinds(value.ResourceDescription.Kinds, mock, background, rule.HasValidate(), client)
 				if err != nil {
-					return warnings, fmt.Errorf("the kind defined in the all exclude resource is invalid: %w", err)
+					return warnings, errors.Wrapf(err, "the kind defined in the all exclude resource is invalid")
 				}
 			}
 		}
@@ -336,11 +336,11 @@ func Validate(policy kyvernov1.PolicyInterface, client dclient.Interface, mock b
 		if !slices.Contains(rule.MatchResources.Kinds, "*") {
 			err := validateKinds(rule.MatchResources.Kinds, mock, background, rule.HasValidate(), client)
 			if err != nil {
-				return warnings, fmt.Errorf("match resource kind is invalid: %w", err)
+				return warnings, errors.Wrapf(err, "match resource kind is invalid")
 			}
 			err = validateKinds(rule.ExcludeResources.Kinds, mock, background, rule.HasValidate(), client)
 			if err != nil {
-				return warnings, fmt.Errorf("exclude resource kind is invalid: %w", err)
+				return warnings, errors.Wrapf(err, "exclude resource kind is invalid")
 			}
 		} else {
 			wildcardErr := validateWildcard(rule.MatchResources.Kinds, spec, rule)
@@ -640,10 +640,7 @@ func addContextVariables(entries []kyvernov1.ContextEntry, ctx *enginecontext.Mo
 		}
 
 		if contextEntry.ConfigMap != nil {
-			ctx.AddVariable(contextEntry.Name + ".data")
-			ctx.AddVariable(contextEntry.Name + ".metadata")
 			ctx.AddVariable(contextEntry.Name + ".data.*")
-			ctx.AddVariable(contextEntry.Name + ".metadata.*")
 		}
 	}
 }
@@ -1072,7 +1069,7 @@ func validateImageRegistry(entry kyvernov1.ContextEntry) error {
 	if !strings.Contains(ref, "kyvernoimageref") {
 		_, err := reference.Parse(ref)
 		if err != nil {
-			return fmt.Errorf("bad image: %s: %w", ref, err)
+			return errors.Wrapf(err, "bad image: %s", ref)
 		}
 	}
 

@@ -8,128 +8,84 @@ import (
 	"github.com/go-logr/logr"
 	kyvernov1 "github.com/kyverno/kyverno/api/kyverno/v1"
 	"github.com/kyverno/kyverno/cmd/cli/kubectl-kyverno/utils/store"
-	"github.com/kyverno/kyverno/pkg/clients/dclient"
-	engineapi "github.com/kyverno/kyverno/pkg/engine/api"
-	"github.com/kyverno/kyverno/pkg/engine/apicall"
-	enginecontext "github.com/kyverno/kyverno/pkg/engine/context"
-	"github.com/kyverno/kyverno/pkg/engine/jmespath"
+	jmespath "github.com/kyverno/kyverno/pkg/engine/jmespath"
 	"github.com/kyverno/kyverno/pkg/engine/variables"
-	"github.com/kyverno/kyverno/pkg/logging"
 	"github.com/kyverno/kyverno/pkg/registryclient"
 )
 
-func LegacyContextLoaderFactory(
-	rclient registryclient.Client,
-	cmResolver engineapi.ConfigmapResolver,
-) engineapi.ContextLoaderFactory {
-	if store.IsMock() {
-		return func(pContext engineapi.PolicyContext, ruleName string) engineapi.ContextLoader {
-			policy := pContext.Policy()
-			return &mockContextLoader{
-				logger:     logging.WithName("MockContextLoaderFactory"),
-				policyName: policy.GetName(),
-				ruleName:   ruleName,
-				client:     pContext.Client(),
-				rclient:    rclient,
-				cmResolver: cmResolver,
-			}
-		}
+// LoadContext - Fetches and adds external data to the Context.
+func LoadContext(ctx context.Context, logger logr.Logger, rclient registryclient.Client, contextEntries []kyvernov1.ContextEntry, enginectx *PolicyContext, ruleName string) error {
+	if len(contextEntries) == 0 {
+		return nil
 	}
-	return func(pContext engineapi.PolicyContext, ruleName string) engineapi.ContextLoader {
-		return &contextLoader{
-			logger:     logging.WithName("LegacyContextLoaderFactory"),
-			client:     pContext.Client(),
-			rclient:    rclient,
-			cmResolver: cmResolver,
-		}
-	}
-}
 
-type contextLoader struct {
-	logger     logr.Logger
-	rclient    registryclient.Client
-	client     dclient.Interface
-	cmResolver engineapi.ConfigmapResolver
-}
-
-func (l *contextLoader) Load(ctx context.Context, contextEntries []kyvernov1.ContextEntry, enginectx enginecontext.Interface) error {
-	for _, entry := range contextEntries {
-		if entry.ConfigMap != nil {
-			if err := loadConfigMap(ctx, l.logger, entry, enginectx, l.cmResolver); err != nil {
-				return err
-			}
-		} else if entry.APICall != nil {
-			if err := loadAPIData(ctx, l.logger, entry, enginectx, l.client); err != nil {
-				return err
-			}
-		} else if entry.ImageRegistry != nil {
-			if err := loadImageData(ctx, l.rclient, l.logger, entry, enginectx); err != nil {
-				return err
-			}
-		} else if entry.Variable != nil {
-			if err := loadVariable(l.logger, entry, enginectx); err != nil {
-				return err
+	policyName := enginectx.policy.GetName()
+	if store.GetMock() {
+		rule := store.GetPolicyRuleFromContext(policyName, ruleName)
+		if rule != nil && len(rule.Values) > 0 {
+			variables := rule.Values
+			for key, value := range variables {
+				if err := enginectx.jsonContext.AddVariable(key, value); err != nil {
+					return err
+				}
 			}
 		}
-	}
-	return nil
-}
 
-type mockContextLoader struct {
-	logger     logr.Logger
-	policyName string
-	ruleName   string
-	rclient    registryclient.Client
-	client     dclient.Interface
-	cmResolver engineapi.ConfigmapResolver
-}
+		hasRegistryAccess := store.GetRegistryAccess()
 
-func (l *mockContextLoader) Load(ctx context.Context, contextEntries []kyvernov1.ContextEntry, enginectx enginecontext.Interface) error {
-	rule := store.GetPolicyRule(l.policyName, l.ruleName)
-	if rule != nil && len(rule.Values) > 0 {
-		variables := rule.Values
-		for key, value := range variables {
-			if err := enginectx.AddVariable(key, value); err != nil {
-				return err
+		// Context Variable should be loaded after the values loaded from values file
+		for _, entry := range contextEntries {
+			if entry.ImageRegistry != nil && hasRegistryAccess {
+				rclient := store.GetRegistryClient()
+				if err := loadImageData(ctx, rclient, logger, entry, enginectx); err != nil {
+					return err
+				}
+			} else if entry.Variable != nil {
+				if err := loadVariable(logger, entry, enginectx); err != nil {
+					return err
+				}
+			} else if entry.APICall != nil && store.IsAllowApiCall() {
+				if err := loadAPIData(ctx, logger, entry, enginectx); err != nil {
+					return err
+				}
 			}
 		}
-	}
-	hasRegistryAccess := store.GetRegistryAccess()
-	// Context Variable should be loaded after the values loaded from values file
-	for _, entry := range contextEntries {
-		if entry.ImageRegistry != nil && hasRegistryAccess {
-			rclient := store.GetRegistryClient()
-			if err := loadImageData(ctx, rclient, l.logger, entry, enginectx); err != nil {
-				return err
-			}
-		} else if entry.Variable != nil {
-			if err := loadVariable(l.logger, entry, enginectx); err != nil {
-				return err
-			}
-		} else if entry.APICall != nil && store.IsApiCallAllowed() {
-			if err := loadAPIData(ctx, l.logger, entry, enginectx, l.client); err != nil {
-				return err
+
+		if rule != nil && len(rule.ForEachValues) > 0 {
+			for key, value := range rule.ForEachValues {
+				if err := enginectx.jsonContext.AddVariable(key, value[store.ForeachElement]); err != nil {
+					return err
+				}
 			}
 		}
-	}
-	if rule != nil && len(rule.ForEachValues) > 0 {
-		for key, value := range rule.ForEachValues {
-			if err := enginectx.AddVariable(key, value[store.GetForeachElement()]); err != nil {
-				return err
+	} else {
+		for _, entry := range contextEntries {
+			if entry.ConfigMap != nil {
+				if err := loadConfigMap(ctx, logger, entry, enginectx); err != nil {
+					return err
+				}
+			} else if entry.APICall != nil {
+				if err := loadAPIData(ctx, logger, entry, enginectx); err != nil {
+					return err
+				}
+			} else if entry.ImageRegistry != nil {
+				if err := loadImageData(ctx, rclient, logger, entry, enginectx); err != nil {
+					return err
+				}
+			} else if entry.Variable != nil {
+				if err := loadVariable(logger, entry, enginectx); err != nil {
+					return err
+				}
 			}
 		}
 	}
 	return nil
 }
 
-func LoadContext(ctx context.Context, factory engineapi.ContextLoaderFactory, contextEntries []kyvernov1.ContextEntry, pContext engineapi.PolicyContext, ruleName string) error {
-	return factory(pContext, ruleName).Load(ctx, contextEntries, pContext.JSONContext())
-}
-
-func loadVariable(logger logr.Logger, entry kyvernov1.ContextEntry, ctx enginecontext.Interface) (err error) {
+func loadVariable(logger logr.Logger, entry kyvernov1.ContextEntry, ctx *PolicyContext) (err error) {
 	path := ""
 	if entry.Variable.JMESPath != "" {
-		jp, err := variables.SubstituteAll(logger, ctx, entry.Variable.JMESPath)
+		jp, err := variables.SubstituteAll(logger, ctx.jsonContext, entry.Variable.JMESPath)
 		if err != nil {
 			return fmt.Errorf("failed to substitute variables in context entry %s %s: %v", entry.Name, entry.Variable.JMESPath, err)
 		}
@@ -142,7 +98,7 @@ func loadVariable(logger logr.Logger, entry kyvernov1.ContextEntry, ctx engineco
 		if err != nil {
 			return fmt.Errorf("invalid default for variable %s", entry.Name)
 		}
-		defaultValue, err = variables.SubstituteAll(logger, ctx, value)
+		defaultValue, err = variables.SubstituteAll(logger, ctx.jsonContext, value)
 		if err != nil {
 			return fmt.Errorf("failed to substitute variables in context entry %s %s: %v", entry.Name, entry.Variable.Default, err)
 		}
@@ -151,7 +107,7 @@ func loadVariable(logger logr.Logger, entry kyvernov1.ContextEntry, ctx engineco
 	var output interface{} = defaultValue
 	if entry.Variable.Value != nil {
 		value, _ := variables.DocumentToUntyped(entry.Variable.Value)
-		variable, err := variables.SubstituteAll(logger, ctx, value)
+		variable, err := variables.SubstituteAll(logger, ctx.jsonContext, value)
 		if err != nil {
 			return fmt.Errorf("failed to substitute variables in context entry %s %s: %v", entry.Name, entry.Variable.Value, err)
 		}
@@ -167,7 +123,7 @@ func loadVariable(logger logr.Logger, entry kyvernov1.ContextEntry, ctx engineco
 		}
 	} else {
 		if path != "" {
-			if variable, err := ctx.Query(path); err == nil {
+			if variable, err := ctx.jsonContext.Query(path); err == nil {
 				output = variable
 			} else if defaultValue == nil {
 				return fmt.Errorf("failed to apply jmespath %s to variable %v", path, err)
@@ -179,13 +135,13 @@ func loadVariable(logger logr.Logger, entry kyvernov1.ContextEntry, ctx engineco
 		return fmt.Errorf("unable to add context entry for variable %s since it evaluated to nil", entry.Name)
 	}
 	if outputBytes, err := json.Marshal(output); err == nil {
-		return ctx.ReplaceContextEntry(entry.Name, outputBytes)
+		return ctx.jsonContext.ReplaceContextEntry(entry.Name, outputBytes)
 	} else {
 		return fmt.Errorf("unable to add context entry for variable %s: %w", entry.Name, err)
 	}
 }
 
-func loadImageData(ctx context.Context, rclient registryclient.Client, logger logr.Logger, entry kyvernov1.ContextEntry, enginectx enginecontext.Interface) error {
+func loadImageData(ctx context.Context, rclient registryclient.Client, logger logr.Logger, entry kyvernov1.ContextEntry, enginectx *PolicyContext) error {
 	imageData, err := fetchImageData(ctx, rclient, logger, entry, enginectx)
 	if err != nil {
 		return err
@@ -194,14 +150,14 @@ func loadImageData(ctx context.Context, rclient registryclient.Client, logger lo
 	if err != nil {
 		return err
 	}
-	if err := enginectx.AddContextEntry(entry.Name, jsonBytes); err != nil {
+	if err := enginectx.jsonContext.AddContextEntry(entry.Name, jsonBytes); err != nil {
 		return fmt.Errorf("failed to add resource data to context: contextEntry: %v, error: %v", entry, err)
 	}
 	return nil
 }
 
-func fetchImageData(ctx context.Context, rclient registryclient.Client, logger logr.Logger, entry kyvernov1.ContextEntry, enginectx enginecontext.Interface) (interface{}, error) {
-	ref, err := variables.SubstituteAll(logger, enginectx, entry.ImageRegistry.Reference)
+func fetchImageData(ctx context.Context, rclient registryclient.Client, logger logr.Logger, entry kyvernov1.ContextEntry, enginectx *PolicyContext) (interface{}, error) {
+	ref, err := variables.SubstituteAll(logger, enginectx.jsonContext, entry.ImageRegistry.Reference)
 	if err != nil {
 		return nil, fmt.Errorf("ailed to substitute variables in context entry %s %s: %v", entry.Name, entry.ImageRegistry.Reference, err)
 	}
@@ -209,7 +165,7 @@ func fetchImageData(ctx context.Context, rclient registryclient.Client, logger l
 	if !ok {
 		return nil, fmt.Errorf("invalid image reference %s, image reference must be a string", ref)
 	}
-	path, err := variables.SubstituteAll(logger, enginectx, entry.ImageRegistry.JMESPath)
+	path, err := variables.SubstituteAll(logger, enginectx.jsonContext, entry.ImageRegistry.JMESPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to substitute variables in context entry %s %s: %v", entry.Name, entry.ImageRegistry.JMESPath, err)
 	}
@@ -281,14 +237,42 @@ func fetchImageDataMap(ctx context.Context, rclient registryclient.Client, ref s
 	return untyped, nil
 }
 
-func loadAPIData(ctx context.Context, logger logr.Logger, entry kyvernov1.ContextEntry, enginectx enginecontext.Interface, client dclient.Interface) error {
-	executor, err := apicall.New(ctx, entry, enginectx, client, logger)
+func loadAPIData(ctx context.Context, logger logr.Logger, entry kyvernov1.ContextEntry, enginectx *PolicyContext) error {
+	jsonData, err := fetchAPIData(ctx, logger, entry, enginectx)
 	if err != nil {
-		return fmt.Errorf("failed to initialize APICall: %w", err)
+		return err
 	}
-	if _, err := executor.Execute(); err != nil {
-		return fmt.Errorf("failed to execute APICall: %w", err)
+
+	if entry.APICall.JMESPath == "" {
+		err = enginectx.jsonContext.AddContextEntry(entry.Name, jsonData)
+		if err != nil {
+			return fmt.Errorf("failed to add resource data to context: contextEntry: %v, error: %v", entry, err)
+		}
+
+		return nil
 	}
+
+	path, err := variables.SubstituteAll(logger, enginectx.jsonContext, entry.APICall.JMESPath)
+	if err != nil {
+		return fmt.Errorf("failed to substitute variables in context entry %s %s: %v", entry.Name, entry.APICall.JMESPath, err)
+	}
+
+	results, err := applyJMESPathJSON(path.(string), jsonData)
+	if err != nil {
+		return err
+	}
+
+	contextData, err := json.Marshal(results)
+	if err != nil {
+		return fmt.Errorf("failed to marshall data %v for context entry %v: %v", contextData, entry, err)
+	}
+
+	err = enginectx.jsonContext.AddContextEntry(entry.Name, contextData)
+	if err != nil {
+		return fmt.Errorf("failed to add JMESPath (%s) results to context, error: %v", entry.APICall.JMESPath, err)
+	}
+
+	logger.V(4).Info("added APICall context entry", "len", len(contextData))
 	return nil
 }
 
@@ -297,30 +281,66 @@ func applyJMESPath(jmesPath string, data interface{}) (interface{}, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to compile JMESPath: %s, error: %v", jmesPath, err)
 	}
+
 	return jp.Search(data)
 }
 
-func loadConfigMap(ctx context.Context, logger logr.Logger, entry kyvernov1.ContextEntry, enginectx enginecontext.Interface, resolver engineapi.ConfigmapResolver) error {
-	data, err := fetchConfigMap(ctx, logger, entry, enginectx, resolver)
+func applyJMESPathJSON(jmesPath string, jsonData []byte) (interface{}, error) {
+	var data interface{}
+	err := json.Unmarshal(jsonData, &data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal JSON: %s, error: %v", string(jsonData), err)
+	}
+	return applyJMESPath(jmesPath, data)
+}
+
+func fetchAPIData(ctx context.Context, log logr.Logger, entry kyvernov1.ContextEntry, enginectx *PolicyContext) ([]byte, error) {
+	if entry.APICall == nil {
+		return nil, fmt.Errorf("missing APICall in context entry %s %v", entry.Name, entry.APICall)
+	}
+
+	path, err := variables.SubstituteAll(log, enginectx.jsonContext, entry.APICall.URLPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to substitute variables in context entry %s %s: %v", entry.Name, entry.APICall.URLPath, err)
+	}
+
+	pathStr := path.(string)
+
+	jsonData, err := getResource(ctx, enginectx, pathStr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get resource with raw url\n: %s: %v", pathStr, err)
+	}
+
+	return jsonData, nil
+}
+
+func getResource(ctx context.Context, enginectx *PolicyContext, p string) ([]byte, error) {
+	return enginectx.client.RawAbsPath(ctx, p)
+}
+
+func loadConfigMap(ctx context.Context, logger logr.Logger, entry kyvernov1.ContextEntry, enginectx *PolicyContext) error {
+	data, err := fetchConfigMap(ctx, logger, entry, enginectx)
 	if err != nil {
 		return fmt.Errorf("failed to retrieve config map for context entry %s: %v", entry.Name, err)
 	}
-	err = enginectx.AddContextEntry(entry.Name, data)
+
+	err = enginectx.jsonContext.AddContextEntry(entry.Name, data)
 	if err != nil {
 		return fmt.Errorf("failed to add config map for context entry %s: %v", entry.Name, err)
 	}
+
 	return nil
 }
 
-func fetchConfigMap(ctx context.Context, logger logr.Logger, entry kyvernov1.ContextEntry, enginectx enginecontext.Interface, resolver engineapi.ConfigmapResolver) ([]byte, error) {
+func fetchConfigMap(ctx context.Context, logger logr.Logger, entry kyvernov1.ContextEntry, enginectx *PolicyContext) ([]byte, error) {
 	contextData := make(map[string]interface{})
 
-	name, err := variables.SubstituteAll(logger, enginectx, entry.ConfigMap.Name)
+	name, err := variables.SubstituteAll(logger, enginectx.jsonContext, entry.ConfigMap.Name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to substitute variables in context %s configMap.name %s: %v", entry.Name, entry.ConfigMap.Name, err)
 	}
 
-	namespace, err := variables.SubstituteAll(logger, enginectx, entry.ConfigMap.Namespace)
+	namespace, err := variables.SubstituteAll(logger, enginectx.jsonContext, entry.ConfigMap.Namespace)
 	if err != nil {
 		return nil, fmt.Errorf("failed to substitute variables in context %s configMap.namespace %s: %v", entry.Name, entry.ConfigMap.Namespace, err)
 	}
@@ -329,7 +349,7 @@ func fetchConfigMap(ctx context.Context, logger logr.Logger, entry kyvernov1.Con
 		namespace = "default"
 	}
 
-	obj, err := resolver.Get(ctx, namespace.(string), name.(string))
+	obj, err := enginectx.informerCacheResolvers.Get(ctx, namespace.(string), name.(string))
 	if err != nil {
 		return nil, fmt.Errorf("failed to get configmap %s/%s : %v", namespace, name, err)
 	}
